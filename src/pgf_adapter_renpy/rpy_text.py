@@ -32,7 +32,7 @@ from .script_model import (
 __all__ = ["parse_script", "parse_file"]
 
 _LABEL_RE = re.compile(r"^label\s+([^\s(:]+)")
-_SCREEN_RE = re.compile(r"^screen\s+([^\s(]+)")
+_SCREEN_RE = re.compile(r"^screen\s+([^\s(]+)\s*(\(.*?\))?\s*:")
 _STYLE_RE = re.compile(r"^style\s+([^\s:]+)(?:\s+is\s+([^\s:]+))?\s*:")
 _DEFINE_RE = re.compile(r"^(define|default)\s+(?:([\w.]+)\.)?([\w.]+)\s*=\s*(.*)$", re.S)
 _INIT_PYTHON_RE = re.compile(r"^init(?:\s+-?\d+)?\s+python(?:\s+hide)?\s*:")
@@ -471,7 +471,7 @@ class _TextParser:
 
         match = _SCREEN_RE.match(text)
         if match:
-            info = self._parse_screen(match.group(1), line, indent)
+            info = self._parse_screen(match.group(1), line, indent, match.group(2) or "()")
             return [
                 Statement(
                     kind=Stmt.SCREEN,
@@ -636,7 +636,9 @@ class _TextParser:
             meta={"caption": caption, "set": "\n".join(menu_set)},
         )
 
-    def _parse_screen(self, name: str, line: _Line, indent: int) -> ScreenInfo:
+    def _parse_screen(
+        self, name: str, line: _Line, indent: int, parameters: str = "()"
+    ) -> ScreenInfo:
         body = self._consume_raw_block(line, indent)
         elements, properties = _parse_screen_elements(body.splitlines())
         uses = tuple(
@@ -648,6 +650,7 @@ class _TextParser:
         return ScreenInfo(
             name=name,
             line=line.number + 1,
+            parameters=parameters,
             properties=properties,
             elements=elements,
             source=body,

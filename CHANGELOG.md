@@ -6,6 +6,18 @@ gets its own version so the history stays traceable.
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-11-01
+
+### Added
+
+- `pgf-adapter-renpy`: `GameArchive` virtual file system for a Ren'Py `game/`
+  directory, merging disk files and `.rpa` archives with Ren'Py precedence
+  rules (disk over archive, `.rpy` over `.rpyc`, `tl/` excluded), cached
+  script parsing, screen source lookup and non-fatal warnings for broken
+  files.
+- Tests for mixed disk/archive trees, translations, broken scripts and the
+  installed test game.
+
 ## [0.0.4] - 2026-11-01
 
 ### Added
