@@ -6,6 +6,18 @@ gets its own version so the history stays traceable.
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-11-01
+
+### Added
+
+- `pgf-adapter-renpy`: `.rpy` source parser producing the same normalized
+  statement model as the compiled reader.  Supports labels (including local
+  labels), dialogue, menus with captions/conditions, if/elif/else, jumps,
+  calls, returns, defines, defaults, styles, python blocks, screens (source
+  plus a light element tree) and skips translation blocks.
+- Tests for source parsing, comments inside strings, triple quoted dialogue,
+  menus, style/define extraction and screen element parsing.
+
 ## [0.0.3] - 2026-11-01
 
 ### Added
