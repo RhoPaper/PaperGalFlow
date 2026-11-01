@@ -6,6 +6,28 @@ gets its own version so the history stays traceable.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-01
+
+### Fixed
+
+- **Choice nodes jumped to the start of their scene.**  A menu inside a label
+  has no label of its own, so the chart only knew the containing label.  The
+  generator now emits a replay `label` per choice node that reopens the same
+  menu (caption + options, using the game's own choice UI) and jumps to the
+  selected branch.  Condition nodes are no longer clickable because their
+  evaluation cannot be replayed safely.
+- **Reinstalling could parse the tool's own generated files as game source.**
+  This turned the previous `quick_menu` hook into a self-referential patch and
+  could raise `Screen 'pgf_hotkey' is not known`.  Generated `pgf_*` files are
+  now excluded from the virtual game archive.
+- Installing a new `.rpy` now removes the stale `.rpyc` so Ren'Py recompiles
+  the updated screen immediately.
+
+### Added
+
+- Regression tests for choice replay labels, generated-file exclusion,
+  reinstall safety and compiled-file cleanup.
+
 ## [0.1.0] - 2026-11-01
 
 First usable release.

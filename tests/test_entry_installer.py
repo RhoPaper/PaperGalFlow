@@ -155,6 +155,14 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse(path.exists())
         self.assertFalse((self.game / "pgf_manifest.json").exists())
 
+    def test_install_removes_stale_compiled_companion(self) -> None:
+        stale = self.game / "pgf_flowchart_screen.rpyc"
+        stale.write_bytes(b"RENPY RPC2" + b"\x00" * 32)
+        report = install_files(self.game, self.make_files())
+        self.assertTrue(report.ok, report.errors)
+        self.assertFalse(stale.exists())
+        self.assertIn("pgf_flowchart_screen.rpyc", report.removed)
+
     def test_dry_run_writes_nothing(self) -> None:
         report = install_files(self.game, self.make_files(), dry_run=True)
         self.assertTrue(report.ok)

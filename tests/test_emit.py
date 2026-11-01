@@ -15,7 +15,15 @@ def sample_graph():
 
     graph = FlowGraph(entry="start")
     graph.add_node(FlowNode("start", NodeKind.ENTRY, title="序章", meta={"label": "start"}))
-    graph.add_node(FlowNode("menu", NodeKind.CHOICE, title="要怎么做？", meta={"label": "start"}))
+    graph.add_node(
+        FlowNode(
+            "menu",
+            NodeKind.CHOICE,
+            title="要怎么做？",
+            options=(("向左", "a"), ("向右", "b")),
+            meta={"label": "start"},
+        )
+    )
     graph.add_node(FlowNode("a", NodeKind.SCENE, title="向左走", meta={"label": "a"}))
     graph.add_node(FlowNode("b", NodeKind.SCENE, title="向右走", meta={"label": "b"}))
     graph.add_node(FlowNode("end_a", NodeKind.ENDING, title="结局 A", meta={"label": "a"}))
@@ -72,6 +80,13 @@ class EmitTests(unittest.TestCase):
         options = FlowchartEmitOptions(game_name="测试游戏", entry_label="start", screen_size=(1280, 720))
         other = emit_flowchart_screen(self.graph, self.layout, self.tokens, options)
         self.assertEqual(other.content, self.file.content)
+
+    def test_choice_nodes_get_replay_labels(self) -> None:
+        self.assertIn("# PaperGalFlow choice replay labels.", self.file.content)
+        self.assertIn("label pgf_replay_", self.file.content)
+        self.assertIn('menu:', self.file.content)
+        self.assertIn('"向左":', self.file.content)
+        self.assertIn("jump a", self.file.content)
 
     def test_no_unsafe_characters_in_screen_names(self) -> None:
         self.assertIn('screen pgf_flowchart():', self.file.content)

@@ -192,6 +192,16 @@ def install_files(
         if dry_run:
             report.written.append(item.name)
             continue
+        companion = game_dir / (item.name[:-4] + ".rpyc")
+        if companion.is_file():
+            if dry_run:
+                report.removed.append(companion.name)
+            else:
+                try:
+                    companion.unlink()
+                    report.removed.append(companion.name)
+                except OSError as exc:
+                    report.warnings.append(f"could not remove stale {companion.name}: {exc}")
         try:
             _atomic_write(target, item.content)
             report.written.append(item.name)

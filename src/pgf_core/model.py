@@ -64,6 +64,9 @@ class FlowNode:
     subtitle: str = ""
     route: str = ""
     tags: tuple[str, ...] = ()
+    options: tuple[tuple[str, str], ...] = ()
+    """Choice options as ``(text, jump_label)``; empty for non-choice nodes."""
+
     meta: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -72,6 +75,7 @@ class FlowNode:
         if not isinstance(self.kind, NodeKind):
             self.kind = NodeKind(self.kind)
         self.tags = tuple(self.tags)
+        self.options = tuple((str(a), str(b)) for a, b in self.options)
         self.meta = dict(self.meta)
 
     # -- presentation helpers -------------------------------------------------
@@ -98,6 +102,7 @@ class FlowNode:
             "subtitle": self.subtitle,
             "route": self.route,
             "tags": list(self.tags),
+            "options": [list(pair) for pair in self.options],
             "meta": dict(self.meta),
         }
 
@@ -110,6 +115,11 @@ class FlowNode:
             subtitle=str(data.get("subtitle", "")),
             route=str(data.get("route", "")),
             tags=tuple(str(t) for t in data.get("tags", ())),
+            options=tuple(
+                (str(pair[0]), str(pair[1]))
+                for pair in data.get("options", ())
+                if isinstance(pair, (list, tuple)) and len(pair) >= 2
+            ),
             meta=dict(data.get("meta", {})),
         )
 
@@ -371,6 +381,7 @@ class FlowGraph:
                         subtitle=node.subtitle,
                         route=node.route,
                         tags=node.tags,
+                        options=node.options,
                         meta=dict(node.meta),
                     )
                 )

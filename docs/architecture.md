@@ -32,6 +32,7 @@
 - `FlowNode(id, kind, title, subtitle, route, tags, meta)`，`kind` 为 `entry / scene / choice / condition / ending`。
 - `FlowEdge(source, target, kind, label, condition, meta)`，`kind` 为 `flow / choice / condition / call / end`。
 - `FlowGraph` 提供去重、可达性、裁剪、子图、校验与 JSON 往返；`meta["label"]` 是引擎侧跳转目标。
+- 选择节点额外保存 `options = ((选项文本, 目标 label), ...)`；生成器据此为没有自己 label 的菜单生成 replay label。
 
 节点状态机 `pgf_core.state`：
 
@@ -101,7 +102,8 @@ FlowGraph
 4. `init -30 python:` 辅助函数：kernel 构造、label 记录、节点标题/敏感度、跳转、滚动。
 5. `style pgf_*:` 文本/按钮样式（由 pgf-style 翻译）。
 6. `init 999 python:` 注册 `config.label_callbacks`，把访问过的 label 记录进 `persistent`。
-7. `screen pgf_flowchart():` 标题栏、图例、缩放/滚动、viewport 与节点绘制。
+7. 选择节点的 replay labels：每个有可用分支的选择节点生成一个 `label pgf_replay_<hash>`，内部是一个复刻原菜单的 `menu`，选择后跳转到对应分支。
+8. `screen pgf_flowchart():` 标题栏、图例、缩放/滚动、viewport 与节点绘制。
 
 全部内容在生成时固化；运行期只读写 `persistent.pgf_progress`，不解析任何游戏脚本。
 

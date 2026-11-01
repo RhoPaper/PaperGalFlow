@@ -23,7 +23,10 @@ from .script_model import ScriptFile
 __all__ = ["GameArchive", "ScriptUnit", "ArchiveError"]
 
 _SCRIPT_SUFFIXES = (".rpyc", ".rpy")
-_EXCLUDED_PREFIXES_DEFAULT = ("tl/", "cache/", "saves/")
+#: ``pgf_`` files are our own output.  They must never be re-parsed as game
+#: source, otherwise a reinstall would treat its previous hook as a quick menu
+#: source and copy the wrapper into itself.
+_EXCLUDED_PREFIXES_DEFAULT = ("tl/", "cache/", "saves/", "pgf_")
 
 
 class ArchiveError(PgfError):

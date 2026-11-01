@@ -13,6 +13,7 @@ Nothing is computed from the game's scripts at runtime.
 
 from __future__ import annotations
 
+import hashlib
 import pprint
 from dataclasses import dataclass
 
@@ -74,7 +75,7 @@ def _node_rows(
             continue
         title = _clean(node.title, options.max_title_chars) or "未命名"
         subtitle = _clean(node.subtitle, options.max_title_chars) if options.show_subtitles else ""
-        label = str(node.meta.get("label", ""))
+        label = _jump_target(node)
         rows.append(
             (
                 node.id,
@@ -89,6 +90,57 @@ def _node_rows(
             )
         )
     return rows
+
+
+def _jump_target(node) -> str:
+    """Return the label a click on this node should jump to.
+
+    Scene/ending nodes jump to their own label.  A choice node gets a
+    generated replay label that reopens its menu, because a menu inside a
+    label has no label of its own.  Condition and merge nodes cannot be
+    replayed faithfully, so they are not clickable.
+    """
+
+    if node.kind is NodeKind.CHOICE:
+        return _replay_label(node.id) if node.options else ""
+    if node.kind is NodeKind.CONDITION:
+        return ""
+    if node.meta.get("merge"):
+        return ""
+    return str(node.meta.get("label", ""))
+
+
+def _replay_label(node_id: str) -> str:
+    digest = hashlib.sha1(node_id.encode("utf-8")).hexdigest()[:12]
+    return f"pgf_replay_{digest}"
+
+
+def _menu_escape(text: str) -> str:
+    return str(text).replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
+
+
+def _replay_label_source(graph: FlowGraph) -> str:
+    blocks: list[str] = []
+    for node in graph.nodes.values():
+        if node.kind is not NodeKind.CHOICE or not node.options:
+            continue
+        lines = [f"label {_replay_label(node.id)}:", "    menu:"]
+        caption = (node.title or "").strip()
+        if caption and caption != "选项":
+            lines.append(f'        "{_menu_escape(caption)}"')
+        for text, target in node.options:
+            lines.append(f'        "{_menu_escape(text)}":')
+            lines.append(f"            jump {target}")
+        blocks.append("\n".join(lines))
+    if not blocks:
+        return ""
+    return (
+        "# PaperGalFlow choice replay labels.\n"
+        "# They re-open the original menu (caption + options) for choice nodes\n"
+        "# that have no label of their own, then jump to the selected branch.\n"
+        + "\n\n".join(blocks)
+        + "\n"
+    )
 
 
 def _edge_data(
@@ -255,6 +307,9 @@ def emit_flowchart_screen(
     parts.append(_init_python_block(helpers, -30))
     parts.append(theme.style_blocks + "\n")
     parts.append(_init_python_block(_label_callback_source(), 999))
+    replay_labels = _replay_label_source(graph)
+    if replay_labels:
+        parts.append(replay_labels)
     parts.append(screen)
     content = "\n".join(part.rstrip("\n") for part in parts) + "\n"
     return GeneratedFile("pgf_flowchart_screen.rpy", content, "screen")
@@ -603,7 +658,7 @@ screen pgf_flowchart():
                     style "pgf_legend_text"
                     yalign 0.5
 
-    text ("拖拽 / 滚轮浏览 · 点击已解锁节点跳转" if not pgf_hover else pgf_hover):
+    text ("拖拽 / 滚轮浏览 · 点击场景或选择节点跳转" if not pgf_hover else pgf_hover):
         style "pgf_small_text"
         xpos (_pgf_screen_w // 2)
         xanchor 0.5

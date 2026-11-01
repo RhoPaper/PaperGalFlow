@@ -59,6 +59,15 @@ class SyntheticGameTests(unittest.TestCase):
             self.assertEqual(unit.format, "rpy")
             self.assertIn("a", archive.parse_unit(unit).labels())
 
+    def test_generated_pgf_files_are_never_game_source(self) -> None:
+        (self.game / "script.rpy").write_text(LABEL_A, encoding="utf-8")
+        (self.game / "pgf_menu_hook.rpy").write_text(
+            "screen quick_menu():\n    text \"generated\"\n", encoding="utf-8"
+        )
+        with GameArchive.open(self.game, use_archives=False) as archive:
+            self.assertEqual([unit.stem for unit in archive.units()], ["script"])
+            self.assertIsNone(archive.screen_source("quick_menu"))
+
     def test_translations_are_excluded(self) -> None:
         (self.game / "tl" / "japanese").mkdir(parents=True)
         (self.game / "tl" / "japanese" / "common.rpy").write_text(LABEL_A, encoding="utf-8")
