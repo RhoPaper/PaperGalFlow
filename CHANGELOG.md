@@ -6,6 +6,19 @@ gets its own version so the history stays traceable.
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-11-01
+
+### Added
+
+- `pgf-adapter-renpy`: compiled script (`.rpyc`) reader.  Handles RPYC2
+  containers (slots 1/2) and the legacy zlib format, unpickles into inert stub
+  classes so third party games cannot execute code, and normalises labels,
+  dialogue, menus, `if` branches, jumps/calls/returns, defines, styles and
+  screen language trees (including screen `use` and element positioning).
+- `pgf-adapter-renpy`: `script_model` shared by all future source formats.
+- Tests covering synthetic containers, malicious pickles and both installed
+  test games.
+
 ## [0.0.2] - 2026-11-01
 
 ### Added
