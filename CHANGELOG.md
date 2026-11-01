@@ -6,6 +6,19 @@ gets its own version so the history stays traceable.
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-11-01
+
+### Added
+
+- `pgf-adapter-renpy`: story graph analyzer.  Walks labels, dialogue, menus
+  and if/elif/else chains; creates scene, choice, condition and ending nodes;
+  follows jumps, treats calls as side edges, resolves local labels, handles
+  fall through, collapses router labels and trivial conditions, prunes
+  unreachable labels, and turns jumps to engine labels such as
+  ``splashscreen``/``quit`` into special ending nodes.
+- Deterministic output and diagnostics (`warnings` / `notes`).
+- Tests against a synthetic branching script and both installed test games.
+
 ## [0.0.5] - 2026-11-01
 
 ### Added
