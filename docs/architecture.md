@@ -98,20 +98,22 @@ FlowGraph
 
 1. 头部注释（版本、游戏、节点统计、风格来源、卸载提示）。
 2. `init -35 python:` 预计算数据：`PGF_META`、`PGF_CANVAS`、`PGF_NODES`、`PGF_PREDECESSORS`、`PGF_EDGE_SEGMENTS`、`PGF_EDGE_LABELS`、`PGF_STYLE`、`PGF_LEGEND`。
-   - 每个节点是 `(id, kind, title, subtitle, jump_label, seen_label, x, y, w, h)`。
-   - `jump_label` 只在场景/结局节点上非空；选择/条件节点为空。
-3. `init -30 python:` 只读辅助函数：`pgf_read_states()` 读取 `renpy.seen_label`，以及节点标题、敏感度、滚动和 `pgf_jump_to()`。
+   - 每个节点是 `(id, kind, title, subtitle, history_text, history_text2, history_fallback, seen_label, x, y, w, h)`。
+   - 场景节点保存前两句台词（第二句用于区分相同开头的分支）；选择节点保存菜单标题并以菜单前的台词作为 fallback；结局保存最后一句。
+3. `init -30 python:` 只读辅助函数：`pgf_read_states()` 读取 `renpy.seen_label`；`pgf_history_ids()` 扫描 `_history_list`，把节点匹配到游戏自己的 `rollback_identifier`；以及标题、敏感度、滚动。
 4. `style pgf_*:` 文本/按钮样式（由 pgf-style 翻译）。
-5. `screen pgf_flowchart():` 标题栏、图例、缩放/滚动、viewport 与节点绘制。
+5. `screen pgf_flowchart():` 标题栏、图例、缩放/滚动、viewport 与节点绘制；点击有历史检查点的节点时调用 `Confirm(..., yes=RollbackToIdentifier(identifier), ...)`。
 
-没有 `init -40` 状态机、没有 `init 999` label 回调、没有 replay label、没有 `persistent` 读写。全部剧情数据在生成时固化；运行期只读 `seen_label`，不解析任何游戏脚本。
+没有 `init -40` 状态机、没有 `init 999` label 回调、没有 replay label、没有 `persistent` 读写、没有 `jump_out_of_context`。全部剧情数据在生成时固化；运行期只读 `seen_label` / `_history_list`，不解析任何游戏脚本。
 
 ### 状态读取
 
 - 生成文件用 `renpy.seen_label(label)` 读取 Ren'Py 自己的已读数据库；这是引擎维护的数据，PaperGalFlow 不写入、不 hook、不改变游戏流程。
 - 节点可用性由 `PGF_PREDECESSORS` 中的前驱节点是否已读推导；结局节点用其场景 label 是否已读推导（因此是“到达过该场景”的近似，而不是精确的 `return` 计数）。
-- 选择/条件节点没有自己的 label，用其所属场景 label 的已读状态推导；它们只显示状态，不参与跳转。
-- 打开流程图时计算一次状态；关闭后重新打开会重新读取，跟随游戏进度。
+- 选择/条件节点没有自己的 label，用其所属场景 label 的已读状态推导。
+- 节点是否可以点击，取决于 `_history_list` 中是否存在匹配的 `rollback_identifier`；匹配时会优先使用两句台词序列，避免同开头分支串线。没有检查点的节点显示“无历史”，不可点击。
+- 点击后调用 Ren'Py 的 `RollbackToIdentifier`（与游戏 HISTORY 的跳回按钮完全相同的 action），由引擎恢复历史、变量和分支状态；流程图自身不写历史、不合成菜单。
+- 打开流程图时计算一次状态和历史映射；关闭后重新打开会重新读取，跟随游戏进度。
 
 ### 入口
 

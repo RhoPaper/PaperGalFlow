@@ -115,17 +115,31 @@ def _iter_statements(statements: Iterable[Statement]) -> Iterator[Statement]:
             yield from _iter_statements(block)
 
 
+def _first_says(statements: Iterable[Statement], limit: int = 2) -> tuple[str, ...]:
+    """Return the first few spoken lines, used to find the history checkpoint."""
+
+    found: list[str] = []
+
+    def walk(block: Iterable[Statement]) -> bool:
+        for statement in block:
+            if statement.meta.get("renpy_type") in _TRANSLATE_TYPES:
+                continue
+            if statement.kind == Stmt.SAY and statement.text.strip():
+                found.append(statement.text)
+                if len(found) >= limit:
+                    return True
+            for nested in statement.iter_blocks():
+                if walk(nested):
+                    return True
+        return False
+
+    walk(statements)
+    return tuple(found)
+
+
 def _first_say(statements: Iterable[Statement]) -> str:
-    for statement in statements:
-        if statement.meta.get("renpy_type") in _TRANSLATE_TYPES:
-            continue
-        if statement.kind == Stmt.SAY and statement.text.strip():
-            return statement.text
-        for block in statement.iter_blocks():
-            found = _first_say(block)
-            if found:
-                return found
-    return ""
+    found = _first_says(statements, 1)
+    return found[0] if found else ""
 
 
 def _last_say(statements: Iterable[Statement]) -> str:
@@ -158,6 +172,7 @@ class _LabelDef:
     script_index: int
     block: list[Statement] = field(default_factory=list)
     first_say: str = ""
+    first_says: tuple[str, ...] = ()
     last_say: str = ""
     has_dialogue: bool = False
     has_menu: bool = False
@@ -321,6 +336,7 @@ class _GraphBuilder:
                     script_index=script_index,
                     block=statement.block,
                     first_say=_first_say(statement.block),
+                    first_says=_first_says(statement.block, 2),
                     last_say=_last_say(statement.block),
                     has_dialogue=_has_say(statement.block),
                     has_menu=_has_menu(statement.block),
@@ -369,6 +385,12 @@ class _GraphBuilder:
                     "label": name,
                     "file": definition.statement.filename,
                     "line": str(definition.statement.line),
+                    "history_text": clean_text(definition.first_says[0], 0)
+                    if definition.first_says
+                    else "",
+                    "history_text2": clean_text(definition.first_says[1], 0)
+                    if len(definition.first_says) > 1
+                    else "",
                 },
             )
             self.label_nodes[name] = node_id
@@ -394,6 +416,9 @@ class _GraphBuilder:
         title: str,
         subtitle: str = "",
         suffix: str = "branch",
+        history_text: str = "",
+        history_text2: str = "",
+        history_fallback: str = "",
     ) -> str:
         node_id = self._unique_id(f"{scope}::{suffix}{line}")
         self.graph.ensure_node(
@@ -401,7 +426,13 @@ class _GraphBuilder:
             kind,
             title=title,
             subtitle=subtitle or scope,
-            meta={"label": scope, "line": str(line)},
+            meta={
+                "label": scope,
+                "line": str(line),
+                "history_text": history_text,
+                "history_text2": history_text2,
+                "history_fallback": history_fallback,
+            },
         )
         return node_id
 
@@ -419,7 +450,12 @@ class _GraphBuilder:
             NodeKind.ENDING,
             title=title,
             subtitle=scope,
-            meta={"label": scope, "line": str(line), "fallthrough": "1" if fallthrough else ""},
+            meta={
+                "label": scope,
+                "line": str(line),
+                "fallthrough": "1" if fallthrough else "",
+                "history_text": clean_text(text, 0),
+            },
         )
         self.ending_nodes[key] = node_id
         return node_id
@@ -500,6 +536,8 @@ class _GraphBuilder:
             if kind == Stmt.MENU:
                 if not statement.items:
                     continue
+                caption = clean_text(statement.meta.get("caption", ""), 0)
+                previous_line = clean_text(last_say, 0)
                 node_id = self._decision_node(
                     scope,
                     statement.line,
@@ -507,6 +545,8 @@ class _GraphBuilder:
                     clean_text(statement.meta.get("caption", ""), self.options.title_chars) or "选项",
                     scope,
                     "menu",
+                    history_text=caption or previous_line,
+                    history_fallback=previous_line if caption and previous_line != caption else "",
                 )
                 attach(node_id)
                 rest = _Join(self)

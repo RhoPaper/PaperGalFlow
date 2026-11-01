@@ -67,7 +67,7 @@ def _node_rows(
     graph: FlowGraph,
     layout: Layout,
     options: FlowchartEmitOptions,
-) -> list[tuple[str, str, str, str, str, str, int, int, int, int]]:
+) -> list[tuple[str, str, str, str, str, str, str, str, int, int, int, int]]:
     rows = []
     for node in graph.nodes.values():
         rect = layout.positions.get(node.id)
@@ -81,7 +81,9 @@ def _node_rows(
                 node.kind.value,
                 title,
                 subtitle,
-                _jump_target(node),
+                str(node.meta.get("history_text", "")),
+                str(node.meta.get("history_text2", "")),
+                str(node.meta.get("history_fallback", "")),
                 str(node.meta.get("label", "")),
                 rect.x,
                 rect.y,
@@ -92,31 +94,16 @@ def _node_rows(
     return rows
 
 
-def _jump_target(node) -> str:
-    """Return the existing scene label a click may jump to.
-
-    Only nodes that are a real scene label are clickable.  Choice nodes live
-    inside a label and have no label of their own, so they are informational;
-    synthesizing a replay menu would execute logic on the player's behalf.
-    """
-
-    if node.kind in (NodeKind.CHOICE, NodeKind.CONDITION):
-        return ""
-    if node.meta.get("merge"):
-        return ""
-    return str(node.meta.get("label", ""))
-
-
 def _edge_data(
     layout: Layout,
-    rows: list[tuple[str, str, str, str, str, str, int, int, int, int]],
+    rows: list[tuple[str, str, str, str, str, str, str, str, int, int, int, int]],
     options: FlowchartEmitOptions,
 ) -> tuple[dict[str, list[tuple[int, int, int, int]]], list[tuple[str, int, int]], list[str]]:
     node_rects = [
-        (row[6], row[7], row[6] + row[8], row[7] + row[9]) for row in rows
+        (row[8], row[9], row[8] + row[10], row[9] + row[11]) for row in rows
     ]
     rect_by_id = {
-        row[0]: (row[6], row[7], row[6] + row[8], row[7] + row[9]) for row in rows
+        row[0]: (row[8], row[9], row[8] + row[10], row[9] + row[11]) for row in rows
     }
     segments: dict[str, list[tuple[int, int, int, int]]] = {}
     labels: list[tuple[str, int, int]] = []
@@ -286,7 +273,71 @@ def _header(
 
 
 def _helper_source() -> str:
-    return '''\
+    return r'''def pgf_text_key(text):
+    """Normalize script/history text for matching (drop Ren'Py text tags)."""
+    text = str(text or "")
+    out = []
+    depth = 0
+    for ch in text:
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            if depth:
+                depth -= 1
+        elif not depth:
+            out.append(ch)
+    key = " ".join("".join(out).split())
+    return key.strip(" \t\r\n「」『』\"'“”‘’（）()【】[]")
+
+
+def pgf_find_history(entries, texts):
+    keys = [pgf_text_key(text) for text in texts if text]
+    if not keys:
+        return None
+    size = len(keys)
+    for index in range(len(entries) - size, -1, -1):
+        if all(entries[index + offset][0] == keys[offset] for offset in range(size)):
+            return entries[index][1]
+    return None
+
+
+def pgf_history_ids():
+    """Map nodes to the game's own rollback checkpoints.
+
+    Only values already present in ``_history_list`` are used, exactly like the
+    jump-back buttons on the game's HISTORY screen.  Nothing is synthesized and
+    no game state is written; nodes without a checkpoint stay non-clickable.
+    """
+    entries = []
+    for entry in getattr(renpy.store, "_history_list", ()) or ():
+        identifier = getattr(entry, "rollback_identifier", None)
+        if not identifier:
+            continue
+        try:
+            if renpy.get_identifier_checkpoints(identifier) is None:
+                continue
+        except Exception:
+            continue
+        key = pgf_text_key(getattr(entry, "what", ""))
+        if key:
+            entries.append((key, identifier))
+
+    result = {}
+    for node in PGF_NODES:
+        # When a second line exists, require the full sequence.  Falling back to
+        # the first line would map every scene that shares an opening line to
+        # the same checkpoint.
+        if node[5]:
+            identifier = pgf_find_history(entries, (node[4], node[5]))
+        else:
+            identifier = pgf_find_history(entries, (node[4],))
+        if identifier is None and node[6]:
+            identifier = pgf_find_history(entries, (node[6],))
+        if identifier is not None:
+            result[node[0]] = identifier
+    return result
+
+
 def pgf_read_states():
     """Derive node states from the game's own seen-label database.
 
@@ -295,7 +346,7 @@ def pgf_read_states():
     """
     seen = {}
     for _pgf_node in PGF_NODES:
-        _pgf_key = _pgf_node[5]
+        _pgf_key = _pgf_node[7]
         seen[_pgf_node[0]] = bool(_pgf_key) and renpy.seen_label(_pgf_key)
     result = {}
     for _pgf_node in PGF_NODES:
@@ -327,20 +378,26 @@ def pgf_node_title(state, title):
     return title or "未命名"
 
 
-def pgf_node_kind_label(kind, state):
+def pgf_node_kind_label(kind, state, identifier):
     if kind == "choice":
-        return "选择 · 仅展示"
-    if kind == "condition":
-        return "分歧 · 仅展示"
-    if kind == "ending":
-        return "结局"
-    if kind == "entry":
-        return "起点"
-    return ""
+        base = "选择"
+    elif kind == "condition":
+        base = "分歧"
+    elif kind == "ending":
+        base = "结局"
+    elif kind == "entry":
+        base = "起点"
+    else:
+        base = ""
+    if state in ("locked", "ending_locked"):
+        return base
+    if not identifier:
+        return (base + " · 无历史") if base else "无历史"
+    return base
 
 
-def pgf_node_sensitive(state, label):
-    return bool(label) and state not in ("locked", "ending_locked")
+def pgf_node_sensitive(state, identifier):
+    return bool(identifier) and state not in ("locked", "ending_locked")
 
 
 def pgf_palette_key(state, kind):
@@ -362,12 +419,6 @@ def pgf_scroll(adjustment, delta):
         adjustment.change(adjustment.value + delta)
     except Exception:
         pass
-
-
-def pgf_jump_to(label):
-    """The only call into the game's flow: jump to an existing scene label."""
-    if label:
-        renpy.jump_out_of_context(label)
 '''
 
 
@@ -379,6 +430,7 @@ screen pgf_flowchart():
 
     default pgf_zoom = PGF_DEFAULT_ZOOM
     default pgf_states = pgf_read_states()
+    default pgf_history = pgf_history_ids()
     default pgf_progress = pgf_progress_text(pgf_states)
     default pgf_hover = ""
     default pgf_xadj = ui.adjustment()
@@ -503,66 +555,67 @@ screen pgf_flowchart():
 
                 for _pgf_node in PGF_NODES:
                     $ _pgf_state = pgf_states.get(_pgf_node[0], "locked")
+                    $ _pgf_ident = pgf_history.get(_pgf_node[0])
                     $ _pgf_pal = PGF_STYLE["palettes"][pgf_palette_key(_pgf_state, _pgf_node[1])]
 
                     add Solid(PGF_STYLE["colors"]["shadow"]):
-                        xpos (_pgf_node[6] + 5)
-                        ypos (_pgf_node[7] + 6)
-                        xysize (_pgf_node[8], _pgf_node[9])
+                        xpos (_pgf_node[8] + 5)
+                        ypos (_pgf_node[9] + 6)
+                        xysize (_pgf_node[10], _pgf_node[11])
 
                     button:
-                        xpos _pgf_node[6]
-                        ypos _pgf_node[7]
-                        xysize (_pgf_node[8], _pgf_node[9])
+                        xpos _pgf_node[8]
+                        ypos _pgf_node[9]
+                        xysize (_pgf_node[10], _pgf_node[11])
                         background Solid(_pgf_pal["fill"])
                         hover_background Solid(_pgf_pal["hover"])
                         insensitive_background Solid(_pgf_pal["fill"])
-                        sensitive pgf_node_sensitive(_pgf_state, _pgf_node[4])
-                        action Function(pgf_jump_to, _pgf_node[4])
+                        sensitive pgf_node_sensitive(_pgf_state, _pgf_ident)
+                        action Confirm("确定要跳转到该处吗？", yes=RollbackToIdentifier(_pgf_ident or ""), no=None, confirm_selected=False)
                         hovered SetScreenVariable("pgf_hover", pgf_node_title(_pgf_state, _pgf_node[2]))
                         unhovered SetScreenVariable("pgf_hover", "")
 
                         fixed:
-                            xysize (_pgf_node[8], _pgf_node[9])
+                            xysize (_pgf_node[10], _pgf_node[11])
 
                             add Solid(_pgf_pal["border"]):
                                 xpos 0
                                 ypos 0
-                                xysize (_pgf_node[8], 2)
+                                xysize (_pgf_node[10], 2)
 
                             add Solid(_pgf_pal["border"]):
                                 xpos 0
-                                ypos (_pgf_node[9] - 2)
-                                xysize (_pgf_node[8], 2)
+                                ypos (_pgf_node[11] - 2)
+                                xysize (_pgf_node[10], 2)
 
                             add Solid(_pgf_pal["border"]):
                                 xpos 0
                                 ypos 0
-                                xysize (2, _pgf_node[9])
+                                xysize (2, _pgf_node[11])
 
                             add Solid(_pgf_pal["border"]):
-                                xpos (_pgf_node[8] - 2)
+                                xpos (_pgf_node[10] - 2)
                                 ypos 0
-                                xysize (2, _pgf_node[9])
+                                xysize (2, _pgf_node[11])
 
                             add Solid(_pgf_pal["strip"]):
                                 xpos 0
                                 ypos 0
-                                xysize (6, _pgf_node[9])
+                                xysize (6, _pgf_node[11])
 
                             text pgf_node_title(_pgf_state, _pgf_node[2]):
                                 style "pgf_node_text"
                                 color _pgf_pal["text"]
                                 xpos 16
                                 ypos 10
-                                xsize (_pgf_node[8] - 30)
+                                xsize (_pgf_node[10] - 30)
                                 line_spacing 2
 
-                            text pgf_node_kind_label(_pgf_node[1], _pgf_state):
+                            text pgf_node_kind_label(_pgf_node[1], _pgf_state, _pgf_ident):
                                 style "pgf_small_text"
                                 color _pgf_pal["strip"]
                                 xpos 16
-                                ypos (_pgf_node[9] - 26)
+                                ypos (_pgf_node[11] - 26)
 
     add Solid(PGF_STYLE["colors"]["panel"]):
         xpos 0
@@ -584,7 +637,7 @@ screen pgf_flowchart():
                     style "pgf_legend_text"
                     yalign 0.5
 
-    text ("拖拽 / 滚轮浏览 · 仅场景/结局节点可跳转" if not pgf_hover else pgf_hover):
+    text ("拖拽 / 滚轮浏览 · 仅可回滚到历史记录中的节点" if not pgf_hover else pgf_hover):
         style "pgf_small_text"
         xpos (_pgf_screen_w // 2)
         xanchor 0.5

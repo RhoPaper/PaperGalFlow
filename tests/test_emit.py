@@ -79,19 +79,23 @@ class EmitTests(unittest.TestCase):
             "PGF_STYLE =",
             "renpy.seen_label",
             "def pgf_read_states",
+            "def pgf_history_ids",
+            "_history_list",
+            "RollbackToIdentifier",
+            "get_identifier_checkpoints",
         ):
             self.assertIn(needle, self.file.content)
         self.assertNotIn("PGFKernel", self.file.content)
         self.assertNotIn("persistent", self.file.content)
         self.assertNotIn("config.label_callbacks", self.file.content)
-        self.assertEqual(self.file.content.count("jump_out_of_context"), 1)
+        self.assertNotIn("jump_out_of_context", self.file.content)
 
     def test_deterministic(self) -> None:
         options = FlowchartEmitOptions(game_name="测试游戏", entry_label="start", screen_size=(1280, 720))
         other = emit_flowchart_screen(self.graph, self.layout, self.tokens, options)
         self.assertEqual(other.content, self.file.content)
 
-    def test_branch_nodes_are_not_clickable(self) -> None:
+    def test_history_fields_and_seen_keys(self) -> None:
         import ast
         import re
 
@@ -102,11 +106,11 @@ class EmitTests(unittest.TestCase):
         )
         assert match is not None
         rows = {row[0]: row for row in ast.literal_eval(match.group(1))}
-        self.assertEqual(rows["menu"][4], "")
-        self.assertEqual(rows["start"][4], "start")
-        self.assertEqual(rows["end_a"][4], "a")
+        self.assertTrue(all(len(row) == 12 for row in rows.values()))
+        self.assertEqual(rows["start"][7], "start")
+        self.assertEqual(rows["menu"][7], "start")
+        self.assertEqual(rows["end_a"][7], "a")
         self.assertNotIn("pgf_replay", self.file.content)
-        self.assertNotIn("label pgf_replay", self.file.content)
 
     def test_no_unsafe_characters_in_screen_names(self) -> None:
         self.assertIn('screen pgf_flowchart():', self.file.content)
