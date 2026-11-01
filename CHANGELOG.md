@@ -6,6 +6,18 @@ gets its own version so the history stays traceable.
 
 ## [Unreleased]
 
+## [0.0.7] - 2026-11-01
+
+### Added
+
+- `pgf-style`: engine independent style tokens (colours, typography, spacing,
+  per-state node palettes), colour parsing/interpolation/contrast helpers,
+  dark/light presets, evidence blending with per-field fallbacks and
+  translation of tokens into Ren'Py style blocks and a serialisable theme
+  dictionary.
+- Tests for colour parsing, token round trips, evidence blending and theme
+  generation.
+
 ## [0.0.6] - 2026-11-01
 
 ### Added
