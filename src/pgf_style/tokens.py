@@ -151,7 +151,7 @@ def default_palettes(tokens: StyleTokens) -> dict[str, NodePalette]:
     text = tokens.text
     dim = tokens.text_dim
     muted = tokens.text_muted
-    from .colors import darken, lighten, mix, with_alpha  # local import to avoid cycle
+    from .colors import darken, lighten, mix  # local import to avoid cycle
 
     return {
         "read": NodePalette(

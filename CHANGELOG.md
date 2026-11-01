@@ -6,6 +6,20 @@ gets its own version so the history stays traceable.
 
 ## [Unreleased]
 
+## [0.0.11] - 2026-11-01
+
+### Added
+
+- `pgf-core`: adapter protocol, entry-point registry (`pgf.adapters`), core
+  degradation chains for story/style/entry, the end-to-end pipeline and the
+  `pgf` CLI (`adapters`, `detect`, `inspect`, `build`, `install`, `uninstall`,
+  `status`, `preview`).
+- `pgf-adapter-renpy`: adapter facade implementing the protocol with a single
+  session cache, Ren'Py log metadata reading, preset graph fallback and manifest
+  status reporting.
+- Development launcher `pgf.py`, fake-adapter tests for the fallback chains and
+  CLI tests.
+
 ## [0.0.10] - 2026-11-01
 
 ### Added

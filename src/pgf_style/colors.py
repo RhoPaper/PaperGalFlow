@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import ast
 import re
-from typing import Iterable
-
 __all__ = [
     "parse_color",
     "normalize_color",
