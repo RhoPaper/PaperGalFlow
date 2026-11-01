@@ -6,6 +6,29 @@ gets its own version so the history stays traceable.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-01
+
+First usable release.
+
+### Added
+
+- Complete end-to-end pipeline: parse a Ren'Py game, build the story graph,
+  explain the degradation chains, compute layout, probe game style, generate
+  the flowchart screen and the entry hook, install atomically and roll back.
+- Documentation set: architecture, usage, limitations and roadmap.
+- Real-game verification on both provided Ren'Py 8.6 titles (Linux): parsing,
+  generation, Ren'Py lint, in-game opening, node jump, close, zoom, scroll and
+  uninstall, plus quick-menu source patch mode tested with a source fixture.
+
+### Fixed
+
+- Generated chrome widgets no longer depend on the game's default GUI images,
+  which many commercial builds omit.
+- `pgf uninstall` removes Ren'Py's compiled `.rpyc` companions so reverting
+  really reverts.
+- The offline preview starts centred on the entry node instead of an empty
+  corner of the canvas.
+
 ## [0.0.11] - 2026-11-01
 
 ### Added

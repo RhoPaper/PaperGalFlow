@@ -149,9 +149,11 @@ class InstallerTests(unittest.TestCase):
         report = uninstall_files(self.game)
         self.assertTrue(path.exists())
         self.assertTrue(any("modified since install" in warning for warning in report.warnings))
+        self.assertTrue((self.game / "pgf_manifest.json").exists())
         report = uninstall_files(self.game, force=True)
         self.assertTrue(report.ok, report.errors)
         self.assertFalse(path.exists())
+        self.assertFalse((self.game / "pgf_manifest.json").exists())
 
     def test_dry_run_writes_nothing(self) -> None:
         report = install_files(self.game, self.make_files(), dry_run=True)

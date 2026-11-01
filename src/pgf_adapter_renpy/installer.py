@@ -306,9 +306,15 @@ def uninstall_files(
             report.errors.append(f"could not remove {name}: {exc}")
 
     manifest_path = game_dir / MANIFEST_NAME
+    kept = [warning for warning in report.warnings if warning.startswith("kept ")]
     if manifest_path.exists():
         if dry_run:
             report.skipped.append(MANIFEST_NAME)
+        elif kept:
+            report.warnings.append(
+                "manifest kept because some generated files were preserved; "
+                "use --force to remove them and the manifest"
+            )
         else:
             try:
                 manifest_path.unlink()

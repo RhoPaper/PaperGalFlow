@@ -115,7 +115,12 @@ class QuickMenuProbe:
         gap: int = 18,
         margin: int = 16,
     ) -> tuple[int, int]:
-        """Pick a free spot next to the original quick menu buttons."""
+        """Pick a free spot next to the original quick menu buttons.
+
+        The quick menu is usually bottom-right.  When it hugs the right edge,
+        appending to its left would cover the dialogue box, so prefer a spot
+        above it; otherwise use the natural left/right order.
+        """
 
         screen_width, screen_height = self.screen_size or (1920, 1080)
         bbox = self.bbox
@@ -123,14 +128,34 @@ class QuickMenuProbe:
             return (screen_width - width - margin * 2, screen_height - height - margin * 4)
         left, top, right, bottom = bbox
         centre_y = top + (bottom - top - height) // 2
-        if right + gap + width <= screen_width - margin:
-            return (right + gap, max(margin, centre_y))
-        if left - gap - width >= margin:
-            return (left - gap - width, max(margin, centre_y))
-        if bottom + gap + height <= screen_height - margin:
-            return (left, bottom + gap)
-        if top - gap - height >= margin:
-            return (left, top - gap - height)
+        right_candidate = (right + gap, max(margin, centre_y))
+        left_candidate = (left - gap - width, max(margin, centre_y))
+        below_candidate = (left, bottom + gap)
+        above_candidate = (left, top - gap - height)
+
+        if left > screen_width * 0.72:
+            candidates = [above_candidate, left_candidate, below_candidate, right_candidate]
+        else:
+            candidates = [right_candidate, left_candidate, below_candidate, above_candidate]
+
+        def fits(candidate: tuple[int, int]) -> bool:
+            x, y = candidate
+            if x < margin or y < margin:
+                return False
+            if x + width > screen_width - margin or y + height > screen_height - margin:
+                return False
+            for button in self.buttons:
+                if not (button.x or button.y):
+                    continue
+                bx2 = button.x + max(button.width, 120)
+                by2 = button.y + max(button.height, 56)
+                if x < bx2 and button.x < x + width and y < by2 and button.y < y + height:
+                    return False
+            return True
+
+        for candidate in candidates:
+            if fits(candidate):
+                return candidate
         return (screen_width - width - margin, screen_height - height - margin * 4)
 
 

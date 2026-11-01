@@ -96,7 +96,9 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(code, 0)
                 self.assertIn("fake", buffer.getvalue())
                 with redirect_stdout(io.StringIO()):
-                    code = cli_main(["build", str(root), "--out", str(out), "--json"])
+                    code = cli_main(
+                        ["build", str(root), "--out", str(out), "--adapter", "fake", "--json"]
+                    )
                 self.assertEqual(code, 0)
                 self.assertTrue((out / "pgf_flowchart_screen.rpy").is_file())
 

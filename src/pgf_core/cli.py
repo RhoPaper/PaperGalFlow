@@ -246,8 +246,11 @@ def _cmd_install(args: argparse.Namespace) -> int:
             _print(f"  ✗ {error}")
         if result.ok:
             _print()
-            _print(f"安装完成。回滚: pgf uninstall {report.info.base_dir}")
-            _print("提示: 首次安装后建议用 Ren'Py 的 lint（例如 ./游戏启动脚本 . lint）确认无语法错误。")
+            if args.dry_run:
+                _print("预演完成，未写入任何文件。移除 --dry-run 后才会安装。")
+            else:
+                _print(f"安装完成。回滚: pgf uninstall {report.info.base_dir}")
+                _print("提示: 首次安装后建议用 Ren'Py 的 lint（例如 ./游戏启动脚本 . lint）确认无语法错误。")
     return 0 if result.ok else 1
 
 
@@ -275,7 +278,10 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
         for error in result.errors:
             _print(f"  ✗ {error}")
         if result.ok:
-            _print("已回滚 PaperGalFlow 生成的文件。")
+            if args.dry_run:
+                _print("预演完成，未删除任何文件。")
+            else:
+                _print("已回滚 PaperGalFlow 生成的文件。")
     return 0 if result.ok else 1
 
 
