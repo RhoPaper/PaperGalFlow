@@ -7,7 +7,7 @@
 - 无第三方依赖，`pip install -e .` 或直接用 `python3 pgf.py`。
 
 ```bash
-git clone <repo> PaperGalFlow && cd PaperGalFlow
+git clone https://github.com/RhoPaper/PaperGalFlow.git PaperGalFlow && cd PaperGalFlow
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e .
 pgf --version
