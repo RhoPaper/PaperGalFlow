@@ -23,6 +23,12 @@ classifiers = [
 ]
 dynamic = ["version"]
 
+[project.urls]
+Homepage = "https://github.com/RhoPaper/PaperGalFlow"
+Repository = "https://github.com/RhoPaper/PaperGalFlow"
+Issues = "https://github.com/RhoPaper/PaperGalFlow/issues"
+Changelog = "https://github.com/RhoPaper/PaperGalFlow/blob/main/CHANGELOG.md"
+
 [project.scripts]
 pgf = "pgf_core.cli:main"
 

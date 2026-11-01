@@ -1,5 +1,9 @@
 # PaperGalFlow
 
+[![tests](https://github.com/RhoPaper/PaperGalFlow/actions/workflows/tests.yml/badge.svg)](https://github.com/RhoPaper/PaperGalFlow/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+
 为 Ren'Py Galgame 生成「柚子社式剧情流程图」的模块化工具。
 
 PaperGalFlow 解析游戏脚本，还原 label / 选项 / 条件分支 / 结局之间的剧情图，按游戏自身的 UI 颜色与字体做布局，然后把流程图**固化**成若干个 `pgf_*.rpy` 文件写进游戏目录。游戏运行时不再解析脚本，也不依赖外部进程；删除生成文件即回滚。
@@ -32,7 +36,7 @@ PaperGalFlow 解析游戏脚本，还原 label / 选项 / 条件分支 / 结局�
 需要 Python 3.10+，无第三方运行时依赖。
 
 ```bash
-git clone <this repo> PaperGalFlow
+git clone https://github.com/RhoPaper/PaperGalFlow.git
 cd PaperGalFlow
 python3 -m venv .venv
 . .venv/bin/activate
