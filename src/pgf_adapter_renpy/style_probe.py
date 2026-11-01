@@ -13,12 +13,11 @@ import re
 from dataclasses import dataclass, field
 from typing import Iterable
 
-from pgf_core.errors import PgfError
 from pgf_style import StyleEvidence, UiSample, luminance as _luminance, lighten as _lighten, normalize_color
 
 from .archive import ArchiveError, GameArchive
 from .png import PngError, color_stats, png_size
-from .script_model import ScreenElement, ScreenInfo, ScriptFile
+from .script_model import ScreenInfo, ScriptFile
 
 __all__ = [
     "QuickButton",
@@ -71,6 +70,7 @@ class QuickMenuProbe:
     found: bool = False
     has_source: bool = False
     source: str = ""
+    parameters: str = ""
     buttons: list[QuickButton] = field(default_factory=list)
     screen_size: tuple[int, int] | None = None
     used_by_say: bool = False
@@ -306,6 +306,7 @@ def _find_quick_menu(
         found=True,
         has_source=bool(info.source),
         source=info.source,
+        parameters=info.parameters or "()",
         screen_size=screen_size,
         used_by_say=used_by_say,
     )

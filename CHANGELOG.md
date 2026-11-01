@@ -6,6 +6,22 @@ gets its own version so the history stays traceable.
 
 ## [Unreleased]
 
+## [0.0.10] - 2026-11-01
+
+### Added
+
+- `pgf-adapter-renpy`: entry hook generator.  When a game ships `quick_menu`
+  source, the original screen is copied under a private name and a wrapper is
+  installed at a late init priority with an appended button.  For compiled-only
+  games the fallback draws a companion button next to the original quick menu
+  using positions extracted from the screen AST.  A hotkey screen is always
+  installed.
+- `pgf-adapter-renpy`: transactional installer with marker checks, atomic
+  writes, SHA-256 manifest, verification, uninstall (including Ren'Py's
+  compiled `.rpyc` companions) and static generated-code checks.
+- Tests for both entry modes, placement, install/verify/uninstall and the
+  file-safety rules.
+
 ## [0.0.9] - 2026-11-01
 
 ### Added
