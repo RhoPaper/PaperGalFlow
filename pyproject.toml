@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "papergalflow"
+description = "Yuzusoft-style story flowcharts for Galgame engines, built by pure file patching."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "PaperGalFlow contributors" }]
+keywords = ["renpy", "galgame", "visual-novel", "flowchart", "modding"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Games/Entertainment",
+]
+dynamic = ["version"]
+
+[project.scripts]
+pgf = "pgf_core.cli:main"
+
+[project.entry-points."pgf.adapters"]
+renpy = "pgf_adapter_renpy.adapter:RenPyAdapter"
+
+[tool.setuptools.dynamic]
+version = { attr = "pgf_core.version.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pgf_adapter_renpy = ["templates/*.rpyi", "templates/*.txt"]
