@@ -1,25 +1,25 @@
 """Generate the standalone Ren'Py ``screen pgf_flowchart`` file.
 
 The generator is a pure function of the story graph, the layout, the style
-tokens and a few options.  It embeds:
+tokens and a few options.  It embeds only data and a screen:
 
-* the runtime state kernel (so visited state is read and written from inside
-  the generated screen code, without any external process),
-* the precomputed graph data (nodes, edges, labels, label map),
+* the precomputed graph data (nodes, edges, labels, predecessors),
+* node states read from Ren'Py's own ``seen_label`` database,
 * a full screen with markup, legend, zoom and a scrollable viewport.
 
-Nothing is computed from the game's scripts at runtime.
+It never writes game state, never hooks a label callback and never synthesizes
+menus.  The only call into the game's flow is ``jump_out_of_context`` to an
+existing scene label; clicking a choice/condition node does nothing because
+those have no scene label of their own.
 """
 
 from __future__ import annotations
 
-import hashlib
 import pprint
 from dataclasses import dataclass
 
 from pgf_core.layout import Layout, Point
 from pgf_core.model import EdgeKind, FlowGraph, NodeKind
-from pgf_core.state import runtime_kernel_source
 from pgf_core.version import __version__
 from pgf_style import StyleTokens, build_theme
 
@@ -67,7 +67,7 @@ def _node_rows(
     graph: FlowGraph,
     layout: Layout,
     options: FlowchartEmitOptions,
-) -> list[tuple[str, str, str, str, str, int, int, int, int]]:
+) -> list[tuple[str, str, str, str, str, str, int, int, int, int]]:
     rows = []
     for node in graph.nodes.values():
         rect = layout.positions.get(node.id)
@@ -75,14 +75,14 @@ def _node_rows(
             continue
         title = _clean(node.title, options.max_title_chars) or "未命名"
         subtitle = _clean(node.subtitle, options.max_title_chars) if options.show_subtitles else ""
-        label = _jump_target(node)
         rows.append(
             (
                 node.id,
                 node.kind.value,
                 title,
                 subtitle,
-                label,
+                _jump_target(node),
+                str(node.meta.get("label", "")),
                 rect.x,
                 rect.y,
                 rect.w,
@@ -93,66 +93,30 @@ def _node_rows(
 
 
 def _jump_target(node) -> str:
-    """Return the label a click on this node should jump to.
+    """Return the existing scene label a click may jump to.
 
-    Scene/ending nodes jump to their own label.  A choice node gets a
-    generated replay label that reopens its menu, because a menu inside a
-    label has no label of its own.  Condition and merge nodes cannot be
-    replayed faithfully, so they are not clickable.
+    Only nodes that are a real scene label are clickable.  Choice nodes live
+    inside a label and have no label of their own, so they are informational;
+    synthesizing a replay menu would execute logic on the player's behalf.
     """
 
-    if node.kind is NodeKind.CHOICE:
-        return _replay_label(node.id) if node.options else ""
-    if node.kind is NodeKind.CONDITION:
+    if node.kind in (NodeKind.CHOICE, NodeKind.CONDITION):
         return ""
     if node.meta.get("merge"):
         return ""
     return str(node.meta.get("label", ""))
 
 
-def _replay_label(node_id: str) -> str:
-    digest = hashlib.sha1(node_id.encode("utf-8")).hexdigest()[:12]
-    return f"pgf_replay_{digest}"
-
-
-def _menu_escape(text: str) -> str:
-    return str(text).replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
-
-
-def _replay_label_source(graph: FlowGraph) -> str:
-    blocks: list[str] = []
-    for node in graph.nodes.values():
-        if node.kind is not NodeKind.CHOICE or not node.options:
-            continue
-        lines = [f"label {_replay_label(node.id)}:", "    menu:"]
-        caption = (node.title or "").strip()
-        if caption and caption != "选项":
-            lines.append(f'        "{_menu_escape(caption)}"')
-        for text, target in node.options:
-            lines.append(f'        "{_menu_escape(text)}":')
-            lines.append(f"            jump {target}")
-        blocks.append("\n".join(lines))
-    if not blocks:
-        return ""
-    return (
-        "# PaperGalFlow choice replay labels.\n"
-        "# They re-open the original menu (caption + options) for choice nodes\n"
-        "# that have no label of their own, then jump to the selected branch.\n"
-        + "\n\n".join(blocks)
-        + "\n"
-    )
-
-
 def _edge_data(
     layout: Layout,
-    rows: list[tuple[str, str, str, str, str, int, int, int, int]],
+    rows: list[tuple[str, str, str, str, str, str, int, int, int, int]],
     options: FlowchartEmitOptions,
 ) -> tuple[dict[str, list[tuple[int, int, int, int]]], list[tuple[str, int, int]], list[str]]:
     node_rects = [
-        (row[5], row[6], row[5] + row[7], row[6] + row[8]) for row in rows
+        (row[6], row[7], row[6] + row[8], row[7] + row[9]) for row in rows
     ]
     rect_by_id = {
-        row[0]: (row[5], row[6], row[5] + row[7], row[6] + row[8]) for row in rows
+        row[0]: (row[6], row[7], row[6] + row[8], row[7] + row[9]) for row in rows
     }
     segments: dict[str, list[tuple[int, int, int, int]]] = {}
     labels: list[tuple[str, int, int]] = []
@@ -203,13 +167,13 @@ def _edge_data(
     return segments, labels, order
 
 
-def _label_map(graph: FlowGraph) -> dict[str, list[str]]:
-    result: dict[str, list[str]] = {}
-    for node in graph.nodes.values():
-        label = str(node.meta.get("label", ""))
-        if label:
-            result.setdefault(label, []).append(node.id)
-    return result
+def _predecessors(graph: FlowGraph) -> dict[str, tuple[str, ...]]:
+    result: dict[str, set[str]] = {}
+    for edge in graph.edges:
+        if edge.kind is EdgeKind.CALL:
+            continue
+        result.setdefault(edge.target, set()).add(edge.source)
+    return {target: tuple(sorted(sources)) for target, sources in result.items()}
 
 
 def _legend(tokens: StyleTokens) -> list[tuple[str, str]]:
@@ -254,9 +218,7 @@ def emit_flowchart_screen(
     screen_size = options.screen_size or DEFAULT_SCREEN_SIZE
     rows = _node_rows(graph, layout, options)
     segments, labels, edge_order = _edge_data(layout, rows, options)
-    label_map = _label_map(graph)
-    endings = [node.id for node in graph.nodes.values() if node.kind is NodeKind.ENDING]
-    kernel_edges = [(edge.source, edge.target, edge.kind.value) for edge in graph.edges]
+    predecessors = _predecessors(graph)
     zoom = _default_zoom(layout, screen_size)
     theme = build_theme(tokens)
 
@@ -268,11 +230,11 @@ def emit_flowchart_screen(
         "entry_node": graph.entry,
         "nodes": len(graph.nodes),
         "edges": len(graph.edges),
-        "endings": len(endings),
+        "endings": len(graph.endings()),
         "screen_size": list(screen_size),
         "style_source": tokens.source,
         "style_name": tokens.name,
-        "persistent_key": "pgf_progress",
+        "state_source": "renpy.seen_label",
     }
 
     data_source = "\n".join(
@@ -281,35 +243,26 @@ def emit_flowchart_screen(
             f"PGF_CANVAS = {_python_literal((layout.width, layout.height))}",
             f"PGF_SCREEN = {_python_literal(screen_size)}",
             f"PGF_DEFAULT_ZOOM = {zoom!r}",
-            f"PGF_SCROLLBARS = {_python_literal('both')}",
             f"PGF_ENTRY = {graph.entry!r}",
             f"PGF_NODES = {_python_literal(rows)}",
+            f"PGF_PREDECESSORS = {_python_literal(predecessors)}",
             f"PGF_EDGE_SEGMENTS = {_python_literal(segments)}",
             f"PGF_EDGE_LABELS = {_python_literal(labels)}",
             f"PGF_EDGE_ORDER = {_python_literal(edge_order)}",
-            f"PGF_LABEL_MAP = {_python_literal(label_map)}",
-            f"PGF_ENDINGS = {_python_literal(endings)}",
-            f"PGF_KERNEL_EDGES = {_python_literal(kernel_edges)}",
             f"PGF_LEGEND = {_python_literal(_legend(tokens))}",
             f"PGF_STYLE = {_python_literal(theme.constants['PGF_STYLE'])}",
         ]
     )
 
     helpers = _helper_source()
-    kernel = runtime_kernel_source()
     screen = _screen_source()
 
     parts: list[str] = []
     if options.header_comment:
         parts.append(_header(graph, options, tokens, screen_size))
-    parts.append(_init_python_block(kernel, -40))
     parts.append(_init_python_block(data_source, -35))
     parts.append(_init_python_block(helpers, -30))
     parts.append(theme.style_blocks + "\n")
-    parts.append(_init_python_block(_label_callback_source(), 999))
-    replay_labels = _replay_label_source(graph)
-    if replay_labels:
-        parts.append(replay_labels)
     parts.append(screen)
     content = "\n".join(part.rstrip("\n") for part in parts) + "\n"
     return GeneratedFile("pgf_flowchart_screen.rpy", content, "screen")
@@ -334,35 +287,38 @@ def _header(
 
 def _helper_source() -> str:
     return '''\
-def pgf_kernel():
-    """Build a runtime state kernel over Ren'Py's persistent store."""
-    return PGFKernel(
-        PGFStore(persistent),
-        PGF_ENTRY,
-        [node[0] for node in PGF_NODES],
-        PGF_ENDINGS,
-        PGF_KERNEL_EDGES,
-        label_map=PGF_LABEL_MAP,
-        key="pgf_progress",
-    )
+def pgf_read_states():
+    """Derive node states from the game's own seen-label database.
+
+    Nothing is written: Ren'Py itself records which labels have been seen, and
+    this only reads that database through ``renpy.seen_label``.
+    """
+    seen = {}
+    for _pgf_node in PGF_NODES:
+        _pgf_key = _pgf_node[5]
+        seen[_pgf_node[0]] = bool(_pgf_key) and renpy.seen_label(_pgf_key)
+    result = {}
+    for _pgf_node in PGF_NODES:
+        _pgf_id = _pgf_node[0]
+        if _pgf_node[1] == "ending":
+            result[_pgf_id] = "ending_read" if seen[_pgf_id] else "ending_locked"
+        elif seen[_pgf_id]:
+            result[_pgf_id] = "read"
+        elif _pgf_id == PGF_ENTRY or any(
+            seen[_pgf_prev] for _pgf_prev in PGF_PREDECESSORS.get(_pgf_id, ())
+        ):
+            result[_pgf_id] = "unread"
+        else:
+            result[_pgf_id] = "locked"
+    return result
 
 
-def pgf_mark_label(name):
-    try:
-        pgf_kernel().mark_seen(name)
-    except Exception:
-        pass
-
-
-def pgf_progress_text(kernel):
-    summary = kernel.summary()
-    total = len([node for node in PGF_NODES if node[1] != "ending"])
-    return "已读 %d / %d    结局 %d / %d" % (
-        summary.get("seen", 0),
-        total,
-        summary.get("ending_reached", 0),
-        summary.get("ending_total", 0),
-    )
+def pgf_progress_text(states):
+    scenes = [node for node in PGF_NODES if node[1] != "ending"]
+    endings = [node for node in PGF_NODES if node[1] == "ending"]
+    read = len([node for node in scenes if states.get(node[0]) == "read"])
+    reached = len([node for node in endings if states.get(node[0]) == "ending_read"])
+    return "已读 %d / %d    结局 %d / %d" % (read, len(scenes), reached, len(endings))
 
 
 def pgf_node_title(state, title):
@@ -373,9 +329,9 @@ def pgf_node_title(state, title):
 
 def pgf_node_kind_label(kind, state):
     if kind == "choice":
-        return "选择"
+        return "选择 · 仅展示"
     if kind == "condition":
-        return "分歧"
+        return "分歧 · 仅展示"
     if kind == "ending":
         return "结局"
     if kind == "entry":
@@ -409,51 +365,21 @@ def pgf_scroll(adjustment, delta):
 
 
 def pgf_jump_to(label):
-    """Leave the menu context and continue the story at ``label``."""
-    if not label:
-        return
-    if not renpy.has_label(label):
-        renpy.notify("PaperGalFlow: 找不到剧情标签 %s" % label)
-        return
-    renpy.hide_screen("pgf_flowchart")
-    if renpy.context_nesting_level() > 0:
+    """The only call into the game's flow: jump to an existing scene label."""
+    if label:
         renpy.jump_out_of_context(label)
-    else:
-        renpy.jump(label)
-'''
-
-
-def _label_callback_source() -> str:
-    return '''\
-def _pgf_label_callback(name, abnormal):
-    pgf_mark_label(name)
-
-
-if hasattr(config, "label_callbacks"):
-    if _pgf_label_callback not in config.label_callbacks:
-        config.label_callbacks.append(_pgf_label_callback)
-else:  # older Ren'Py
-    _pgf_previous_label_callback = getattr(config, "label_callback", None)
-
-    def _pgf_label_callback_wrapper(name, abnormal):
-        _pgf_label_callback(name, abnormal)
-        if _pgf_previous_label_callback:
-            _pgf_previous_label_callback(name, abnormal)
-
-    config.label_callback = _pgf_label_callback_wrapper
 '''
 
 
 def _screen_source() -> str:
-    return """\
+    return '''\
 screen pgf_flowchart():
     modal True
     zorder 200
 
     default pgf_zoom = PGF_DEFAULT_ZOOM
-    default pgf_state_kernel = pgf_kernel()
-    default pgf_states = pgf_state_kernel.states()
-    default pgf_progress = pgf_progress_text(pgf_state_kernel)
+    default pgf_states = pgf_read_states()
+    default pgf_progress = pgf_progress_text(pgf_states)
     default pgf_hover = ""
     default pgf_xadj = ui.adjustment()
     default pgf_yadj = ui.adjustment()
@@ -580,14 +506,14 @@ screen pgf_flowchart():
                     $ _pgf_pal = PGF_STYLE["palettes"][pgf_palette_key(_pgf_state, _pgf_node[1])]
 
                     add Solid(PGF_STYLE["colors"]["shadow"]):
-                        xpos (_pgf_node[5] + 5)
-                        ypos (_pgf_node[6] + 6)
-                        xysize (_pgf_node[7], _pgf_node[8])
+                        xpos (_pgf_node[6] + 5)
+                        ypos (_pgf_node[7] + 6)
+                        xysize (_pgf_node[8], _pgf_node[9])
 
                     button:
-                        xpos _pgf_node[5]
-                        ypos _pgf_node[6]
-                        xysize (_pgf_node[7], _pgf_node[8])
+                        xpos _pgf_node[6]
+                        ypos _pgf_node[7]
+                        xysize (_pgf_node[8], _pgf_node[9])
                         background Solid(_pgf_pal["fill"])
                         hover_background Solid(_pgf_pal["hover"])
                         insensitive_background Solid(_pgf_pal["fill"])
@@ -597,46 +523,46 @@ screen pgf_flowchart():
                         unhovered SetScreenVariable("pgf_hover", "")
 
                         fixed:
-                            xysize (_pgf_node[7], _pgf_node[8])
+                            xysize (_pgf_node[8], _pgf_node[9])
 
                             add Solid(_pgf_pal["border"]):
                                 xpos 0
                                 ypos 0
-                                xysize (_pgf_node[7], 2)
+                                xysize (_pgf_node[8], 2)
 
                             add Solid(_pgf_pal["border"]):
                                 xpos 0
-                                ypos (_pgf_node[8] - 2)
-                                xysize (_pgf_node[7], 2)
+                                ypos (_pgf_node[9] - 2)
+                                xysize (_pgf_node[8], 2)
 
                             add Solid(_pgf_pal["border"]):
                                 xpos 0
                                 ypos 0
-                                xysize (2, _pgf_node[8])
+                                xysize (2, _pgf_node[9])
 
                             add Solid(_pgf_pal["border"]):
-                                xpos (_pgf_node[7] - 2)
+                                xpos (_pgf_node[8] - 2)
                                 ypos 0
-                                xysize (2, _pgf_node[8])
+                                xysize (2, _pgf_node[9])
 
                             add Solid(_pgf_pal["strip"]):
                                 xpos 0
                                 ypos 0
-                                xysize (6, _pgf_node[8])
+                                xysize (6, _pgf_node[9])
 
                             text pgf_node_title(_pgf_state, _pgf_node[2]):
                                 style "pgf_node_text"
                                 color _pgf_pal["text"]
                                 xpos 16
                                 ypos 10
-                                xsize (_pgf_node[7] - 30)
+                                xsize (_pgf_node[8] - 30)
                                 line_spacing 2
 
                             text pgf_node_kind_label(_pgf_node[1], _pgf_state):
                                 style "pgf_small_text"
                                 color _pgf_pal["strip"]
                                 xpos 16
-                                ypos (_pgf_node[8] - 26)
+                                ypos (_pgf_node[9] - 26)
 
     add Solid(PGF_STYLE["colors"]["panel"]):
         xpos 0
@@ -658,7 +584,7 @@ screen pgf_flowchart():
                     style "pgf_legend_text"
                     yalign 0.5
 
-    text ("拖拽 / 滚轮浏览 · 点击场景或选择节点跳转" if not pgf_hover else pgf_hover):
+    text ("拖拽 / 滚轮浏览 · 仅场景/结局节点可跳转" if not pgf_hover else pgf_hover):
         style "pgf_small_text"
         xpos (_pgf_screen_w // 2)
         xanchor 0.5
@@ -713,4 +639,4 @@ screen pgf_flowchart():
             yalign 0.5
 
     key "game_menu" action Return()
-"""
+'''

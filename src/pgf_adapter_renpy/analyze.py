@@ -275,7 +275,6 @@ class _GraphBuilder:
         if self.options.merge_trivial_conditions:
             self._merge_trivial_conditions()
         self._prune()
-        self._attach_choice_options()
         self._promote_entry()
         self.notes = [
             note
@@ -713,40 +712,6 @@ class _GraphBuilder:
             self.notes.append(f"pruned {len(removed)} unreachable node(s)")
         # Call edges that point at pruned labels were dropped with their
         # nodes; nothing else to do.
-
-    def _attach_choice_options(self) -> None:
-        """Give choice nodes real jump targets for a menu replay.
-
-        A menu inside a label has no label of its own, so jumping to the
-        containing label would replay the whole scene from its start.  Options
-        whose target is a labelled scene/ending are recorded instead; the
-        emitter then generates a tiny replay label that reopens this menu.
-        """
-
-        for node in self.graph.nodes.values():
-            if node.kind is not NodeKind.CHOICE:
-                continue
-            scope_label = str(node.meta.get("label", ""))
-            options: list[tuple[str, str]] = []
-            seen: set[tuple[str, str]] = set()
-            for edge in self.graph.outgoing(node.id):
-                if edge.kind is not EdgeKind.CHOICE:
-                    continue
-                target = self.graph.nodes.get(edge.target)
-                if target is None or target.meta.get("merge"):
-                    continue
-                if target.kind in (NodeKind.CHOICE, NodeKind.CONDITION):
-                    continue
-                label = str(target.meta.get("label", ""))
-                text = clean_text(edge.label, 0)
-                if not label or not text or label == scope_label:
-                    continue
-                key = (text, label)
-                if key in seen:
-                    continue
-                seen.add(key)
-                options.append(key)
-            node.options = tuple(options)
 
     def _promote_entry(self) -> None:
         if not self.graph.nodes:

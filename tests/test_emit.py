@@ -20,7 +20,6 @@ def sample_graph():
             "menu",
             NodeKind.CHOICE,
             title="要怎么做？",
-            options=(("向左", "a"), ("向右", "b")),
             meta={"label": "start"},
         )
     )
@@ -73,20 +72,41 @@ class EmitTests(unittest.TestCase):
         self.assertIn("hidden_condition", emitted.content)
 
     def test_runtime_data_present(self) -> None:
-        for needle in ("PGF_NODES =", "PGF_EDGE_SEGMENTS =", "PGF_LABEL_MAP =", "PGF_ENDINGS =", "PGF_STYLE =", "class PGFKernel"):
+        for needle in (
+            "PGF_NODES =",
+            "PGF_PREDECESSORS =",
+            "PGF_EDGE_SEGMENTS =",
+            "PGF_STYLE =",
+            "renpy.seen_label",
+            "def pgf_read_states",
+        ):
             self.assertIn(needle, self.file.content)
+        self.assertNotIn("PGFKernel", self.file.content)
+        self.assertNotIn("persistent", self.file.content)
+        self.assertNotIn("config.label_callbacks", self.file.content)
+        self.assertEqual(self.file.content.count("jump_out_of_context"), 1)
 
     def test_deterministic(self) -> None:
         options = FlowchartEmitOptions(game_name="测试游戏", entry_label="start", screen_size=(1280, 720))
         other = emit_flowchart_screen(self.graph, self.layout, self.tokens, options)
         self.assertEqual(other.content, self.file.content)
 
-    def test_choice_nodes_get_replay_labels(self) -> None:
-        self.assertIn("# PaperGalFlow choice replay labels.", self.file.content)
-        self.assertIn("label pgf_replay_", self.file.content)
-        self.assertIn('menu:', self.file.content)
-        self.assertIn('"向左":', self.file.content)
-        self.assertIn("jump a", self.file.content)
+    def test_branch_nodes_are_not_clickable(self) -> None:
+        import ast
+        import re
+
+        match = re.search(
+            r"PGF_NODES = (\[.*?\])\n    PGF_PREDECESSORS",
+            self.file.content,
+            re.S,
+        )
+        assert match is not None
+        rows = {row[0]: row for row in ast.literal_eval(match.group(1))}
+        self.assertEqual(rows["menu"][4], "")
+        self.assertEqual(rows["start"][4], "start")
+        self.assertEqual(rows["end_a"][4], "a")
+        self.assertNotIn("pgf_replay", self.file.content)
+        self.assertNotIn("label pgf_replay", self.file.content)
 
     def test_no_unsafe_characters_in_screen_names(self) -> None:
         self.assertIn('screen pgf_flowchart():', self.file.content)

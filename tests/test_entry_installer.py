@@ -97,7 +97,7 @@ class InstallerTests(unittest.TestCase):
     def make_files(self):
         flowchart = (
             "# PaperGalFlow test screen\n"
-            "PGF_NODES = [('start', 'entry', '开始', '', 'start', 0, 0, 10, 10)]\n"
+            "PGF_NODES = [('start', 'entry', '开始', '', 'start', 'start', 0, 0, 10, 10)]\n"
             "screen pgf_flowchart():\n"
             "    text \"chart\"\n"
         )

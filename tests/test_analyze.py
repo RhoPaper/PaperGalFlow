@@ -85,14 +85,6 @@ class SyntheticAnalyzeTests(unittest.TestCase):
         self.assertEqual({e.target for e in outgoing}, {"branch_a", "branch_b", "fall_a"})
         self.assertEqual({e.label for e in outgoing}, {"A", "B", "C"})
         self.assertTrue(all(e.kind is EdgeKind.CHOICE for e in outgoing))
-        self.assertEqual(
-            {text for text, _label in menu.options},
-            {"A", "B", "C"},
-        )
-        self.assertEqual(
-            {label for _text, label in menu.options},
-            {"branch_a", "branch_b", "fall_a"},
-        )
 
     def test_condition_node(self) -> None:
         conditions = [n for n in self.graph.nodes.values() if n.kind is NodeKind.CONDITION]

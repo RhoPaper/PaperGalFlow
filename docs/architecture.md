@@ -32,13 +32,13 @@
 - `FlowNode(id, kind, title, subtitle, route, tags, meta)`，`kind` 为 `entry / scene / choice / condition / ending`。
 - `FlowEdge(source, target, kind, label, condition, meta)`，`kind` 为 `flow / choice / condition / call / end`。
 - `FlowGraph` 提供去重、可达性、裁剪、子图、校验与 JSON 往返；`meta["label"]` 是引擎侧跳转目标。
-- 选择节点额外保存 `options = ((选项文本, 目标 label), ...)`；生成器据此为没有自己 label 的菜单生成 replay label。
+- 只有带 `meta["label"]` 的场景/结局节点可以跳转；选择/条件节点只用于显示，不生成任何可执行逻辑。
 
 节点状态机 `pgf_core.state`：
 
 - `NodeState = locked / unread / read / ending_locked / ending_read`。
 - 规则：entry 永远可用；任一非 call 入边的源节点已读 → 当前节点 unread；已访问 → read；结局只有“已达成/未达成”两种，未达成的标题不展示。
-- 真正的状态机源码在 `pgf_core/runtime/pgf_runtime.py`，它会被**原样嵌入**生成文件。宿主测试直接 import 同一份源码，因此游戏内与测试中的语义不会分叉。
+- 这套状态机现在只用于**宿主预览与测试**（`pgf preview`）。游戏内不再嵌入它：生成文件直接读取 Ren'Py 自己的 `seen_label` 数据（跨存档/跨周目的 `_seen_ever`），避免写状态或挂回调。
 
 布局 `pgf_core.layout`：
 
@@ -97,22 +97,21 @@ FlowGraph
 `pgf_flowchart_screen.rpy`：
 
 1. 头部注释（版本、游戏、节点统计、风格来源、卸载提示）。
-2. `init -40 python:` 内嵌运行时状态机（`PGFKernel` 等）。
-3. `init -35 python:` 预计算数据：`PGF_NODES`、`PGF_EDGE_SEGMENTS`、`PGF_EDGE_LABELS`、`PGF_LABEL_MAP`、`PGF_STYLE` 等。
-4. `init -30 python:` 辅助函数：kernel 构造、label 记录、节点标题/敏感度、跳转、滚动。
-5. `style pgf_*:` 文本/按钮样式（由 pgf-style 翻译）。
-6. `init 999 python:` 注册 `config.label_callbacks`，把访问过的 label 记录进 `persistent`。
-7. 选择节点的 replay labels：每个有可用分支的选择节点生成一个 `label pgf_replay_<hash>`，内部是一个复刻原菜单的 `menu`，选择后跳转到对应分支。
-8. `screen pgf_flowchart():` 标题栏、图例、缩放/滚动、viewport 与节点绘制。
+2. `init -35 python:` 预计算数据：`PGF_META`、`PGF_CANVAS`、`PGF_NODES`、`PGF_PREDECESSORS`、`PGF_EDGE_SEGMENTS`、`PGF_EDGE_LABELS`、`PGF_STYLE`、`PGF_LEGEND`。
+   - 每个节点是 `(id, kind, title, subtitle, jump_label, seen_label, x, y, w, h)`。
+   - `jump_label` 只在场景/结局节点上非空；选择/条件节点为空。
+3. `init -30 python:` 只读辅助函数：`pgf_read_states()` 读取 `renpy.seen_label`，以及节点标题、敏感度、滚动和 `pgf_jump_to()`。
+4. `style pgf_*:` 文本/按钮样式（由 pgf-style 翻译）。
+5. `screen pgf_flowchart():` 标题栏、图例、缩放/滚动、viewport 与节点绘制。
 
-全部内容在生成时固化；运行期只读写 `persistent.pgf_progress`，不解析任何游戏脚本。
+没有 `init -40` 状态机、没有 `init 999` label 回调、没有 replay label、没有 `persistent` 读写。全部剧情数据在生成时固化；运行期只读 `seen_label`，不解析任何游戏脚本。
 
-### 状态记录
+### 状态读取
 
-- `config.label_callbacks` 在 label 进入时被调用；回调把 label 映射到图节点并写入 `persistent`。
-- `persistent` 中保存 `{"v": 1, "seen": [...], "chosen": [...]}`；版本不匹配时自动视为空。
-- 打开流程图时，screen 用 `PGFKernel` 计算每个节点的状态；锁定节点标题显示“？？？”。
-- 标签回调采用“追加”而不是覆盖，避免破坏游戏已有的回调；旧版本 Ren'Py 才回退到包装 `config.label_callback`。
+- 生成文件用 `renpy.seen_label(label)` 读取 Ren'Py 自己的已读数据库；这是引擎维护的数据，PaperGalFlow 不写入、不 hook、不改变游戏流程。
+- 节点可用性由 `PGF_PREDECESSORS` 中的前驱节点是否已读推导；结局节点用其场景 label 是否已读推导（因此是“到达过该场景”的近似，而不是精确的 `return` 计数）。
+- 选择/条件节点没有自己的 label，用其所属场景 label 的已读状态推导；它们只显示状态，不参与跳转。
+- 打开流程图时计算一次状态；关闭后重新打开会重新读取，跟随游戏进度。
 
 ### 入口
 

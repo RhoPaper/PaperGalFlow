@@ -6,6 +6,30 @@ gets its own version so the history stays traceable.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-01
+
+### Changed
+
+- **Only scene labels are jump targets.**  Clicking a scene/ending node calls
+  exactly one thing: `renpy.jump_out_of_context(label)` for a label that exists
+  in the game.  Choice and condition nodes are informational ("仅展示"); the
+  generated replay menus and all synthesized choice logic are removed.
+- **Node state now comes from Ren'Py itself.**  The generated screen reads
+  `renpy.seen_label`; it no longer embeds a state kernel, registers
+  `config.label_callbacks` or writes `persistent.pgf_progress`.  This also
+  means previously played progress is reflected immediately, and PaperGalFlow
+  has no runtime state of its own to clean up.
+
+### Removed
+
+- Choice-node replay labels and the option metadata used to build them.
+- The embedded `PGFKernel` runtime and the label-callback hook.
+
+### Fixed
+
+- Reinstall no longer parses its own `pgf_*` files as game source.
+- Installing a new `.rpy` removes the stale `.rpyc` companion.
+
 ## [0.1.1] - 2026-11-01
 
 ### Fixed
