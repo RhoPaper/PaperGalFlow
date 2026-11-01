@@ -88,10 +88,6 @@ def build_theme(tokens: StyleTokens) -> RenpyTheme:
     return RenpyTheme(constants={"PGF_STYLE": style}, style_blocks=style_source(tokens))
 
 
-def _style(properties: dict[str, str], indent: str = "    ") -> str:
-    return "\n".join(f"{indent}{key} {value}" for key, value in properties.items())
-
-
 def style_source(tokens: StyleTokens) -> str:
     """Return Ren'Py ``style`` blocks for the generated screen."""
 
@@ -122,9 +118,13 @@ def style_source(tokens: StyleTokens) -> str:
         f"{font}"
         f"    size {tokens.hint_size}\n"
         f'    color "{tokens.text_muted}"\n\n'
-        "style pgf_chrome_button:\n"
+        "style pgf_chrome_text:\n"
         f"{font}"
         f"    size {tokens.legend_size}\n"
         f'    idle_color "{tokens.button_text}"\n'
-        f'    hover_color "{tokens.accent}"\n'
+        f'    hover_color "{tokens.accent}"\n\n'
+        "style pgf_chrome_button:\n"
+        f'    background Solid("{tokens.button_fill}")\n'
+        f'    hover_background Solid("{tokens.button_hover}")\n'
+        "    padding (12, 4)\n"
     )

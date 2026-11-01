@@ -6,6 +6,20 @@ gets its own version so the history stays traceable.
 
 ## [Unreleased]
 
+## [0.0.9] - 2026-11-01
+
+### Added
+
+- `pgf-adapter-renpy`: full flowchart screen generator.  Emits a standalone
+  `pgf_flowchart_screen.rpy` containing the embedded runtime state kernel,
+  precomputed nodes/edges/labels, the six state palettes, title bar, legend,
+  zoom controls, draggable viewport and scroll buttons.  The screen never falls
+  back to the game's default GUI images, which many commercial games exclude.
+- `pgf-core`: offline HTML/SVG previewer that renders the exact layout and
+  style tokens for review without starting Ren'Py.
+- Tests for generated code structure, condition-label hiding, determinism and
+  end-to-end analyse → layout → emit.
+
 ## [0.0.8] - 2026-11-01
 
 ### Added

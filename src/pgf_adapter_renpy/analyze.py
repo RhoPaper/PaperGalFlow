@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Iterable, Iterator
 
 from pgf_core.errors import GraphError
-from pgf_core.model import EdgeKind, FlowGraph, FlowNode, NodeKind
+from pgf_core.model import EdgeKind, FlowGraph, NodeKind
 
 from .script_model import ScriptFile, Statement, Stmt
 
@@ -188,6 +188,12 @@ class _Join:
     def settled(self) -> bool:
         return self.node is not None or self.exits is not None
 
+    @property
+    def has_pending(self) -> bool:
+        if self.pending:
+            return True
+        return bool(self.delegate is not None and self.delegate.has_pending)
+
     def incoming(self, source: str, kind: EdgeKind, label: str) -> None:
         if self.node is not None:
             self.builder.connect(source, self.node, kind, label)
@@ -245,6 +251,7 @@ class _GraphBuilder:
         self.label_nodes: dict[str, str] = {}
         self.ending_nodes: dict[tuple[str, int], str] = {}
         self.used_ids: set[str] = set()
+        self.dropped_ids: set[str] = set()
         self.next_label: dict[str, str] = {}
         self.entry_label = ""
         self.special_endings = dict(self.options.special_endings)
@@ -269,6 +276,11 @@ class _GraphBuilder:
             self._merge_trivial_conditions()
         self._prune()
         self._promote_entry()
+        self.notes = [
+            note
+            for note in self.notes
+            if not any(f"'{node_id}'" in note for node_id in self.dropped_ids)
+        ]
         try:
             self.graph.validate()
         except GraphError as exc:
@@ -440,6 +452,8 @@ class _GraphBuilder:
         join = _Join(self)
         self._analyze_seq(definition.block, node_id, join, EdgeKind.FLOW, "", name)
 
+        if not join.has_pending:
+            return
         following = self.next_label.get(name)
         if following and following in self.label_nodes:
             join.bind_node(self.label_nodes[following])
@@ -639,6 +653,7 @@ class _GraphBuilder:
                 was_entry = self.graph.entry == node_id
                 self.graph.remove_node(node_id)
                 self.used_ids.discard(node_id)
+                self.dropped_ids.add(node_id)
                 if was_entry:
                     self.graph.entry = target
                 self.notes.append(f"collapsed router label {node_id!r}")
@@ -675,6 +690,7 @@ class _GraphBuilder:
                 was_entry = self.graph.entry == node_id
                 self.graph.remove_node(node_id)
                 self.used_ids.discard(node_id)
+                self.dropped_ids.add(node_id)
                 if was_entry:
                     self.graph.entry = target
                 changed = True
@@ -686,6 +702,13 @@ class _GraphBuilder:
             self.graph.entry = next(iter(self.graph.nodes))
         removed = self.graph.prune_unreachable(include_calls=self.options.include_side_labels)
         if removed:
+            removed_set = set(removed)
+            self.dropped_ids.update(removed_set)
+            self.notes = [
+                note
+                for note in self.notes
+                if not any(f"'{node_id}'" in note for node_id in removed_set)
+            ]
             self.notes.append(f"pruned {len(removed)} unreachable node(s)")
         # Call edges that point at pruned labels were dropped with their
         # nodes; nothing else to do.

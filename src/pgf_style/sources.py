@@ -103,11 +103,13 @@ def tokens_from_evidence(
         tokens.panel = panel
         tokens.panel_light = lighten(panel, 0.07)
         if luminance(panel) > 0.55:
-            tokens.background = lighten(panel, 0.12)
-            tokens.overlay = with_alpha(darken(panel, 0.55), 0.35)
+            tokens.background = lighten(panel, 0.30)
+            tokens.overlay = with_alpha(darken(panel, 0.55), 0.10)
+            tokens.shadow = with_alpha(darken(panel, 0.65), 0.16)
         else:
             tokens.background = darken(panel, 0.65)
-            tokens.overlay = with_alpha("#000000", 0.35)
+            tokens.overlay = with_alpha("#000000", 0.28)
+            tokens.shadow = with_alpha("#000000", 0.35)
         tokens.border = mix(panel, tokens.text_dim, 0.55)
         applied.append("panel")
 
@@ -163,35 +165,35 @@ def tokens_from_evidence(
         tokens.palettes.update(
             {
                 "read": NodePalette(
-                    fill=mix(tokens.panel, tokens.accent, 0.16),
-                    hover=mix(tokens.panel, tokens.accent, 0.26),
+                    fill=mix(tokens.panel, tokens.accent, 0.30),
+                    hover=mix(tokens.panel, tokens.accent, 0.42),
                     border=tokens.accent,
                     text=tokens.text,
                     strip=tokens.accent,
                 ),
                 "unread": NodePalette(
                     fill=tokens.panel_light,
-                    hover=lighten(tokens.panel, 0.03),
-                    border=tokens.border,
+                    hover=lighten(tokens.panel, 0.02),
+                    border=mix(tokens.border, tokens.accent, 0.35),
                     text=tokens.text_dim,
                     strip=mix(tokens.accent, tokens.border, 0.55),
                 ),
                 "locked": NodePalette(
-                    fill=darken(tokens.panel, 0.06),
-                    hover=darken(tokens.panel, 0.06),
-                    border=lighten(tokens.border, 0.2),
-                    text=lighten(tokens.text_muted, 0.25),
-                    strip=lighten(tokens.border, 0.1),
+                    fill=mix(tokens.panel, "#8a8a8a", 0.14),
+                    hover=mix(tokens.panel, "#8a8a8a", 0.14),
+                    border=lighten(tokens.border, 0.18),
+                    text=tokens.text_muted,
+                    strip=lighten(tokens.border, 0.05),
                 ),
             }
         )
 
-    tokens.edge = mix(tokens.border, tokens.text_muted, 0.5)
-    tokens.edge_choice = mix(tokens.accent, tokens.border, 0.3)
+    tokens.edge = mix(tokens.text_dim, tokens.text, 0.35)
+    tokens.edge_choice = mix(tokens.accent, tokens.text, 0.18)
     tokens.edge_condition = mix(tokens.border, "#6f9bb3", 0.45)
     tokens.edge_call = mix(tokens.border, "#b39a6a", 0.55)
-    tokens.button_fill = tokens.panel_light
-    tokens.button_hover = lighten(tokens.panel_light, 0.06)
+    tokens.button_fill = mix(tokens.panel, tokens.accent, 0.16)
+    tokens.button_hover = mix(tokens.panel, tokens.accent, 0.32)
     tokens.button_text = tokens.text
     tokens.close_text = tokens.text_dim
 
