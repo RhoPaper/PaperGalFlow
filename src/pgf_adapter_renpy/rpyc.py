@@ -384,14 +384,24 @@ def _normalize_node(node: Any) -> Statement | None:
             meta={"store": _expr(getattr(node, "store", None))},
         )
 
-    if cls == "Define":
+    if cls in ("Define", "Default"):
+        store = _expr(getattr(node, "store", None))
+        name = _expr(getattr(node, "varname", None))
+        if store.startswith("store."):
+            store = store[len("store.") :]
+        elif store == "store":
+            store = ""
+        full_name = f"{store}.{name}" if store else name
         return Statement(
             kind=Stmt.DEFINE,
             line=line,
             filename=filename,
-            name=_expr(getattr(node, "varname", None)),
+            name=full_name,
             source=_code_source(node),
-            meta={"store": _expr(getattr(node, "store", None))},
+            meta={
+                "store": _expr(getattr(node, "store", None)),
+                "default": "1" if cls == "Default" else "",
+            },
         )
 
     if cls == "Style":

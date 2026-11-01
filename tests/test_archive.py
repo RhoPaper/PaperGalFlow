@@ -105,7 +105,7 @@ class RealGameTests(unittest.TestCase):
             self.assertTrue(all(unit.format == "rpyc" for unit in units))
             gui = archive.find_script("scripts/gui")
             self.assertIsNotNone(gui)
-            self.assertIn("accent_color", gui.defines())
+            self.assertIn("gui.accent_color", gui.defines())
 
     def test_no_screen_source_for_compiled_game(self) -> None:
         with GameArchive.open(game1_dir() / "game") as archive:

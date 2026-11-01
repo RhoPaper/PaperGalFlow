@@ -118,9 +118,9 @@ class Game1ScriptTests(unittest.TestCase):
         script = self.decode("scripts/gui.rpyc")
         defines = script.defines()
         self.assertGreater(len(defines), 100)
-        self.assertIn("accent_color", defines)
-        self.assertIn("#", defines["accent_color"])
-        self.assertIn("text_font", defines)
+        self.assertIn("gui.accent_color", defines)
+        self.assertIn("#", defines["gui.accent_color"])
+        self.assertIn("gui.text_font", defines)
 
     def test_story_labels_and_menus(self) -> None:
         script = self.decode("scripts/content/story/demo.rpyc")

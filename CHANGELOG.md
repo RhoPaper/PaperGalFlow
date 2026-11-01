@@ -6,6 +6,19 @@ gets its own version so the history stays traceable.
 
 ## [Unreleased]
 
+## [0.0.8] - 2026-11-01
+
+### Added
+
+- `pgf-adapter-renpy`: dependency free PNG decoder (8/16 bit, greyscale, RGB,
+  palette, grey+alpha, RGBA) and colour sampler for UI assets stored in
+  `.rpa` archives, with row-limited decoding for large backgrounds.
+- `pgf-adapter-renpy`: style probe reading `gui.*` defines, style blocks,
+  screen language trees and screen size (`gui.init`), sampling the game's own
+  quick menu icons / option buttons / textbox / menu background, and
+  extracting quick menu button positions into a placement helper.
+- Tests with synthetic PNGs, a synthetic source game and both real games.
+
 ## [0.0.7] - 2026-11-01
 
 ### Added
