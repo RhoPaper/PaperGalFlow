@@ -28,21 +28,35 @@ from .theme import (
     write_theme,
 )
 from .tokens import NodePalette, StyleTokens, style_tokens
+from .vision import (
+    OpenAICompatibleVision,
+    VisionConfig,
+    VisionError,
+    VisionStyle,
+    fuse_vision,
+    vision_backend,
+    vision_tokens,
+)
 
 __all__ = [
     "PRESET_NAMES",
     "NodePalette",
+    "OpenAICompatibleVision",
     "RenpyTheme",
     "StyleEvidence",
     "StyleTokens",
     "Theme",
     "ThemeError",
     "UiSample",
+    "VisionConfig",
+    "VisionError",
+    "VisionStyle",
     "apply_theme",
     "build_theme",
     "contrast_ratio",
     "contrast_text",
     "darken",
+    "fuse_vision",
     "lighten",
     "load_theme",
     "luminance",
@@ -57,6 +71,8 @@ __all__ = [
     "theme_document",
     "to_hex",
     "tokens_from_evidence",
+    "vision_backend",
+    "vision_tokens",
     "write_theme",
     "with_alpha",
 ]

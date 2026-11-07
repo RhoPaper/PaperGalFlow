@@ -81,6 +81,9 @@ class AssetGenerationTests(unittest.TestCase):
         self.assertEqual(manifest["legend_locked"], "pgf_ui/legend_locked.png")
         self.assertGreaterEqual(int(manifest["frame"]), 20)
         self.assertEqual(int(manifest["frame"]), node_frame_border(self.tokens))
+        self.assertNotIn("legend_choice", manifest)
+        referenced = {value for key, value in manifest.items() if key != "frame"}
+        self.assertTrue(referenced <= set(self.by_name))
 
     def test_geometry_follows_tokens(self) -> None:
         tokens = style_tokens(corner_radius=22, border_width=3)

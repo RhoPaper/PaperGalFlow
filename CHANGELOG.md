@@ -6,6 +6,38 @@ gets its own version so the history stays traceable.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-01
+
+### Added
+
+- **Optional screenshot vision backend.**  `--screenshots PATH` (repeatable,
+  a file or directory) plus an OpenAI-compatible chat-completions endpoint
+  configured through `PGF_VISION_ENDPOINT` / `PGF_VISION_MODEL` /
+  `PGF_VISION_API_KEY` now feeds screenshots to a vision model.  The answer is
+  validated, normalised and optionally fused with the game's GUI/asset
+  evidence; the blend weight grows when local confidence is low and scales
+  with the model's own confidence.  Text and accent colours are protected by
+  contrast checks.  No network call happens unless both screenshots and
+  configuration are present.
+- `pgf-style.vision`: OpenAI-compatible client (stdlib `urllib`, base64 data
+  URLs, image count/size limits, fenced-JSON tolerance), `fuse_vision`,
+  `vision_tokens` and a dependency-injectable transport for tests.
+- The screenshot style chain (`--screenshots` with a configured backend) can
+  now produce a vision-only style if local evidence fails entirely.
+- `pgf inspect --json` exposes the raw vision result under
+  `style.evidence.vision`; warnings distinguish "screenshots supplied but no
+  backend" from a failed analysis.
+
+### Changed
+
+- Node titles are wrapped and truncated to at most two lines at generation
+  time, so long scene titles no longer overlap the "无历史"/kind label on the
+  node's bottom edge.  Hover text collapses the line breaks.
+- The style chain is now `game` (local evidence + optional vision fusion) →
+  `screenshot` (vision-only fallback) → `preset`.
+- API keys are read from the environment only and are never written to
+  generated files, manifests or diagnostic output.
+
 ## [0.4.2] - 2026-11-01
 
 ### Added

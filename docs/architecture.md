@@ -59,8 +59,8 @@
 | `build_story(...)` | 解析脚本 → `FlowGraph` |
 | `screenshot_graph(...)` | AI 截图补全入口/分支（当前返回 None） |
 | `preset_graph(...)` | 无法解析时的占位图 |
-| `build_style(...)` | GUI/资产探测 → `StyleTokens` |
-| `screenshot_style(...)` | AI 截图风格提取（当前返回 None） |
+| `build_style(...)` | GUI/资产探测 → `StyleTokens`，可选融合截图视觉结果 |
+| `screenshot_style(...)` | 仅截图视觉分析；未配置/无截图时不可用 |
 | `plan_entry(...)` | 给定模式尝试生成入口方案；不可用则返回 `available=False` |
 | `emit(...)` | 图 + 布局 + token + 入口 → 生成文件 |
 | `install / uninstall` | 写文件、manifest、回滚 |
@@ -78,10 +78,11 @@ ScriptFile（统一语句模型）
    ▼
 FlowGraph
    │
-   ├── style_probe.py：gui.* define、style、screen 树、gui.init、PNG 采样
+   ├── style_probe.py：gui.* define、style、screen 树、gui.init、PNG 区域采样
    │        ▼
-   │   pgf_style.tokens_from_evidence → StyleTokens →（可选）theme.apply_theme
-   │        → build_theme → Ren'Py 样式片段
+   │   pgf_style.tokens_from_evidence → StyleTokens
+   │        →（可选）vision.fuse_vision（截图模型，按置信度融合）
+   │        →（可选）theme.apply_theme → build_theme → Ren'Py 样式片段
    │
    ├── compute_layout
    │
@@ -136,15 +137,16 @@ FlowGraph
 ```
 src/
   pgf_core/
-    model.py state.py layout.py persistence.py
-    adapter.py pipeline.py preview.py cli.py
-    runtime/pgf_runtime.py     # 嵌入游戏的同一份状态机源码
+    model.py state.py layout.py
+    adapter.py pipeline.py preview.py cli.py theme.py
+    runtime/pgf_runtime.py     # 宿主预览/测试用的旧状态机（不写入游戏）
   pgf_adapter_renpy/
     rpa.py archive.py rpyc.py rpy_text.py script_model.py
-    analyze.py style_probe.py png.py
+    analyze.py style_probe.py png.py assets.py
     screen_emit.py entry.py installer.py adapter.py
   pgf_style/
     tokens.py colors.py evidence.py sources.py presets.py renpy_theme.py
+    theme.py vision.py
 tests/                         # 合成 + 真实游戏集成测试
 docs/
 ```

@@ -16,6 +16,7 @@ those have no scene label of their own.
 from __future__ import annotations
 
 import pprint
+import unicodedata
 from dataclasses import dataclass
 
 from pgf_core.layout import Layout, Point
@@ -56,7 +57,7 @@ class FlowchartEmitOptions:
     entry_label: str = ""
     screen_size: tuple[int, int] | None = None
     show_subtitles: bool = False
-    max_title_chars: int = 36
+    max_title_chars: int = 60
     max_edge_label_chars: int = 26
     show_condition_labels: bool = False
     version: str = __version__
@@ -74,17 +75,83 @@ def _clean(text: str, limit: int) -> str:
     return clean_text(text, limit)
 
 
+def _char_units(char: str) -> float:
+    if char in "\n":
+        return 0.0
+    if char.isspace():
+        return 0.35
+    if unicodedata.east_asian_width(char) in ("W", "F", "A"):
+        return 1.0
+    return 0.56
+
+
+def _fit_title(text: str, width: int, font_size: int, max_lines: int = 2) -> str:
+    """Wrap a node title and truncate it so it cannot overlap the kind label.
+
+    Ren'Py's text displayable does not clip; without this a long scene title
+    draws over the node border.  The width estimate uses East Asian width so
+    CJK and Latin titles both fit the same node.
+    """
+
+    text = str(text or "").strip()
+    if not text:
+        return ""
+    max_units = max(5.0, (width - 8) / max(8.0, float(font_size)))
+    closing = "，。！？；：、）》」』”’…"
+    lines: list[str] = []
+    current = ""
+    current_units = 0.0
+    overflow = False
+    for char in text:
+        units = _char_units(char)
+        if current and current_units + units > max_units:
+            if char in closing and len(current) > 1:
+                # Keep closing punctuation with the previous character instead
+                # of leaving a lone "。" at the start of the next line.
+                moved = current[-1]
+                lines.append(current[:-1])
+                current = moved + char
+                current_units = _char_units(moved) + units
+            else:
+                lines.append(current)
+                current = char
+                current_units = units
+            if len(lines) >= max_lines:
+                overflow = True
+                break
+        else:
+            current += char
+            current_units += units
+    if current and len(lines) < max_lines:
+        lines.append(current)
+    elif current:
+        overflow = True
+    if overflow:
+        # Drop characters from the last line until the ellipsis fits.
+        last = lines[-1].rstrip()
+        while last and sum(_char_units(char) for char in last) + _char_units("…") > max_units:
+            last = last[:-1]
+        lines[-1] = last.rstrip("，、。；： ") + "…"
+    return "\n".join(lines)
+
+
 def _node_rows(
     graph: FlowGraph,
     layout: Layout,
     options: FlowchartEmitOptions,
+    font_size: int = 23,
 ) -> list[tuple[str, str, str, str, str, str, str, str, int, int, int, int]]:
     rows = []
     for node in graph.nodes.values():
         rect = layout.positions.get(node.id)
         if rect is None:
             continue
-        title = _clean(node.title, options.max_title_chars) or "未命名"
+        title = _fit_title(
+            _clean(node.title, options.max_title_chars) or "未命名",
+            max(40, rect.w - 28),
+            font_size,
+            2,
+        )
         subtitle = _clean(node.subtitle, options.max_title_chars) if options.show_subtitles else ""
         rows.append(
             (
@@ -214,7 +281,7 @@ def emit_flowchart_screen(
 ) -> GeneratedFile:
     options = options or FlowchartEmitOptions()
     screen_size = options.screen_size or DEFAULT_SCREEN_SIZE
-    rows = _node_rows(graph, layout, options)
+    rows = _node_rows(graph, layout, options, tokens.node_text_size)
     segments, labels, edge_order = _edge_data(layout, rows, options)
     predecessors = _predecessors(graph)
     zoom = _default_zoom(layout, screen_size)
@@ -390,6 +457,10 @@ def pgf_node_title(state, title):
     if state in ("locked", "ending_locked"):
         return "？？？"
     return title or "未命名"
+
+
+def pgf_hover_title(state, title):
+    return pgf_node_title(state, title).replace("\n", " ")
 
 
 def pgf_node_kind_label(kind, state, identifier):
@@ -586,7 +657,7 @@ screen pgf_flowchart():
                         insensitive_background Frame(PGF_UI["node_" + pgf_palette_key(_pgf_state, _pgf_node[1])], PGF_UI["frame"], PGF_UI["frame"])
                         sensitive pgf_node_sensitive(_pgf_state, _pgf_ident)
                         action Confirm("确定要跳转到该处吗？", yes=RollbackToIdentifier(_pgf_ident or ""), no=None, confirm_selected=False)
-                        hovered SetScreenVariable("pgf_hover", pgf_node_title(_pgf_state, _pgf_node[2]))
+                        hovered SetScreenVariable("pgf_hover", pgf_hover_title(_pgf_state, _pgf_node[2]))
                         unhovered SetScreenVariable("pgf_hover", "")
 
                         fixed:
@@ -595,15 +666,15 @@ screen pgf_flowchart():
                             text pgf_node_title(_pgf_state, _pgf_node[2]):
                                 style "pgf_node_text"
                                 color _pgf_pal["text"]
-                                xpos 23
-                                ypos 10
-                                xsize (_pgf_node[10] - 37)
-                                line_spacing 2
+                                xpos 20
+                                ypos 8
+                                xsize (_pgf_node[10] - 28)
+                                line_spacing 0
 
                             text pgf_node_kind_label(_pgf_node[1], _pgf_state, _pgf_ident):
                                 style "pgf_small_text"
                                 color _pgf_pal["strip"]
-                                xpos 23
+                                xpos 20
                                 ypos (_pgf_node[11] - 26)
 
     add PGF_UI["bar_shadow"]:

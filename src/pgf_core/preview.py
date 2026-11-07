@@ -173,7 +173,7 @@ def render_svg(
             f'rx="3" fill="{palette.strip}"/>'
         )
         chars = max(6, int((rect.w - 30) / max(8.0, tokens.node_text_size * 0.86)))
-        lines = _wrap(title, chars, 3)
+        lines = _wrap(title, chars, 2)
         for index, line in enumerate(lines):
             parts.append(
                 f'<text x="{rect.x + 16}" y="{rect.y + 28 + index * (tokens.node_text_size + 3)}" '

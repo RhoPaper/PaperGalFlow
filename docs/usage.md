@@ -54,6 +54,7 @@ pgf build <game> --out out/game1
 - 写入 `pgf_flowchart_screen.rpy`、`pgf_menu_hook.rpy`、`pgf_ui/*.png`（25 个九宫格资产）和 `pgf_manifest.json`；
 - 如果目标文件存在但不含 PaperGalFlow 标记，默认拒绝覆盖；`--force` 才会覆盖；
 - `--dry-run` 只打印计划；
+- 可加 `--theme theme.json`，生成的 screen 与九宫格 PNG 都会使用主题颜色/圆角；
 - 安装后建议跑一次游戏 lint。
 
 ### `pgf status <路径>`
@@ -75,6 +76,24 @@ pgf preview <game> --theme out/sakura.json --out out/sakura.html
 
 主题字段分组：`colors`、`typography`、`geometry`、`layout`、`edges`、`chrome`、`palettes`；也可以直接写 `"accent": "#..."` 这类平坦键。`"preset": "paper_light"` 会先切换到内置主题再叠加覆盖。未知键或非法颜色会直接报错，不会生成坏代码。
 
+### 可选：截图视觉分析
+
+样式链支持把游戏截图交给 OpenAI 兼容的视觉模型，作为本地 GUI/PNG 采样的补充；模型只提供颜色和圆角/边框建议，不参与剧情跳转，也不会写游戏状态。
+
+```bash
+export PGF_VISION_ENDPOINT=https://api.example.com/v1/chat/completions
+export PGF_VISION_MODEL=vision-model
+export PGF_VISION_API_KEY=...          # 本地服务可省略
+pgf inspect <game> --screenshots shot1.png --screenshots shot2.png
+pgf install <game> --screenshots screenshots/
+```
+
+- `--screenshots` 可重复，也可传目录（只读取 PNG/JPEG/WebP）；最多 4 张，每张 8 MB 以内。
+- 结果按置信度融合：本地证据越弱、模型置信度越高，视觉结果权重越大；文字/强调色会做对比度保护。
+- 未设置 `PGF_VISION_ENDPOINT`/`PGF_VISION_MODEL` 时不会发起任何网络请求，只打印一条 warning 并继续使用本地证据。
+- 截图会发送给配置的第三方服务；请自行确认隐私与合规。API key 只从环境变量读取，不写入 manifest 或生成文件。
+- 剧情链的 screenshot 和入口的 `ai_rewrite` 仍未配置；视觉后端目前只服务样式链。
+
 ### `pgf preview <路径> --out <html> [--theme theme.json]`
 
 生成离线 HTML+SVG 预览，布局与配色来自真实生成数据；`--theme` 会应用主题文件，包括圆角半径、边框宽度与柔化阴影。`--seen label1,label2` 可以模拟一批已读节点。预览页打开后会自动横向滚动到入口附近；在浏览器里可继续滚动/缩放查看整张图。
@@ -88,6 +107,9 @@ pgf preview <game> --theme out/sakura.json --out out/sakura.html
 | `--include-side-labels` | 包含仅通过 `call` 到达的 label（默认裁剪，避免把成就/系统脚本画进剧情图） |
 | `--show-condition-labels` | 在连线上显示 `if` 条件表达式（默认隐藏，避免代码与剧透） |
 | `--theme theme.json` | 应用 JSON 主题（颜色、字号、圆角/边框、节点配色） |
+| `--screenshots PATH` | 截图或截图目录，可重复；需要配置视觉后端 |
+| `--vision-endpoint URL` | 覆盖 `PGF_VISION_ENDPOINT` |
+| `--vision-model NAME` | 覆盖 `PGF_VISION_MODEL` |
 | `--entry-mode quick_menu_patch\|ai_rewrite\|overlay_button` | 强制入口模式；`ai_rewrite` 当前不可用 |
 | `--json` | 机器可读输出 |
 

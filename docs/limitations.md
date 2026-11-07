@@ -1,6 +1,6 @@
 # 已知边界与限制
 
-本文明确列出 v0.1.0 的能力边界，避免把“生成时快照”误解为运行时动态解析。
+本文明确列出当前 0.4.x 的能力边界，避免把“生成时快照”误解为运行时动态解析。
 
 ## 1. 纯文件修补 = 生成时快照
 
@@ -13,20 +13,13 @@
 - 悬浮按钮位置由 quick_menu 的 `xpos/ypos` 和按钮 PNG 尺寸推断；极端自定义布局（相对定位、动态 HLayout、运行时计算坐标）可能得到不理想的位置。此时仍可用 F10。
 - `quick_menu_patch` 模式会复制原始 screen 正文；如果原 screen 依赖 `screen` 级属性/变体/参数，包装层只覆盖了正文，极端情况下需要人工调整生成文件。
 
-## 3. AI 环节尚未配置
+## 3. AI 环节是可选后端
 
-需求中的“截图 AI 分析”和“AI 辅助改写”需要外部视觉/语言模型后端。v0.1.0 在降级链里保留并诚实报告：
-
-- `screenshot`（剧情/风格）→ `unavailable: AI screenshot analysis is not configured`
-- `ai_rewrite`（入口）→ `unavailable: AI 辅助改写需要外部后端`
-
-因此实际可用的路径是：
-
-- 剧情：脚本解析（`.rpy` / `.rpyc`）
-- 风格：GUI 定义 + UI PNG 采样 → 内置预设
-- 入口：quick_menu 源码改写 → 悬浮按钮（+ 热键）
-
-后续版本接入后端时，只需实现 adapter 的 `screenshot_*` / `plan_entry("ai_rewrite")`，Core 的编排不变。
+- **样式截图链已实现**（v0.4.3）：`--screenshots` + `PGF_VISION_ENDPOINT`/`PGF_VISION_MODEL` 调用 OpenAI 兼容视觉模型，结果与本地 GUI/PNG 证据按置信度融合；未配置时完全离线。
+- **剧情截图链和入口 AI 改写尚未配置**：两者在降级链里保留并诚实报告为 unavailable；实际可用路径仍是脚本解析和 quick_menu 源码改写/悬浮按钮。
+- 视觉模型只返回颜色、圆角/边框和置信度，不返回剧情/跳转数据；字体仍来自本地 `gui.*`。截图质量、游戏画面是否包含 UI、模型是否理解 Galgame 布局都会影响结果。
+- 截图会发送给配置的第三方服务；API key 仅从环境变量读取。失败时只产生 warning，并自动回退到本地证据/预设。
+- 后续若接入剧情截图或 AI 入口改写，只需实现 adapter 的 `screenshot_graph` / `plan_entry("ai_rewrite")`，Core 的编排不变。
 
 ## 4. 历史回滚：只跳历史中已有的检查点
 

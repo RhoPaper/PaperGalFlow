@@ -58,6 +58,9 @@ class PipelineOptions:
     entry_mode: str = ""
     title: str = ""
     theme_path: str = ""
+    screenshots: tuple[str, ...] = ()
+    vision_endpoint: str = ""
+    vision_model: str = ""
 
     def normalized(self) -> "PipelineOptions":
         return PipelineOptions(
@@ -70,6 +73,9 @@ class PipelineOptions:
             entry_mode=self.entry_mode.strip(),
             title=self.title.strip(),
             theme_path=self.theme_path.strip(),
+            screenshots=tuple(str(item) for item in self.screenshots),
+            vision_endpoint=self.vision_endpoint.strip(),
+            vision_model=self.vision_model.strip(),
         )
 
 
@@ -230,6 +236,15 @@ class Pipeline:
             raise PipelineError("no story source was available: " + self._describe(chain))
         return result, chain
 
+    def _screenshot_paths(self) -> tuple[Path, ...]:
+        return tuple(Path(item).expanduser() for item in self.options.screenshots)
+
+    def _vision_options(self) -> dict[str, Any]:
+        return {
+            "endpoint": self.options.vision_endpoint,
+            "model": self.options.vision_model,
+        }
+
     def _style_chain(self, info: AdapterInfo) -> tuple[StyleResult, ChainReport]:
         from pgf_style import preset_tokens
 
@@ -238,14 +253,33 @@ class Pipeline:
         for step in STYLE_CHAIN:
             try:
                 if step == "game":
-                    candidate = self.adapter.build_style(info, preset=self.options.style_preset)
+                    candidate = self.adapter.build_style(
+                        info,
+                        preset=self.options.style_preset,
+                        screenshots=self._screenshot_paths(),
+                        vision_options=self._vision_options(),
+                    )
                     message = (
                         f"style {getattr(candidate.tokens, 'name', '')} from "
                         f"{getattr(candidate.tokens, 'source', '')}"
                     )
                 elif step == "screenshot":
-                    candidate = self.adapter.screenshot_style(info)
-                    message = "AI screenshot analysis is not configured"
+                    candidate = self.adapter.screenshot_style(
+                        info,
+                        screenshots=self._screenshot_paths(),
+                        vision_options=self._vision_options(),
+                        preset=self.options.style_preset,
+                    )
+                    if candidate is None:
+                        message = (
+                            "screenshot style needs --screenshots and "
+                            "PGF_VISION_ENDPOINT / PGF_VISION_MODEL"
+                        )
+                    else:
+                        message = (
+                            f"style {getattr(candidate.tokens, 'name', '')} from "
+                            "screenshot vision analysis"
+                        )
                 else:
                     tokens = preset_tokens(self.options.style_preset)
                     candidate = StyleResult(tokens=tokens, notes=["using the built-in preset style"])

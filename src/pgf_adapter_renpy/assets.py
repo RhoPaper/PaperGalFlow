@@ -72,6 +72,7 @@ def ui_manifest(tokens: StyleTokens) -> dict[str, object]:
     for state in _NODE_STATES:
         manifest[f"node_{state}"] = f"{UI_DIR}/node_{state}.png"
         manifest[f"node_{state}_hover"] = f"{UI_DIR}/node_{state}_hover.png"
+    for state in ("read", "unread", "locked", "ending"):
         manifest[f"legend_{state}"] = f"{UI_DIR}/legend_{state}.png"
     return manifest
 

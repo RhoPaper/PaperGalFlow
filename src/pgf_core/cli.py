@@ -86,6 +86,35 @@ def _print_report(report: PipelineReport, *, verbose: bool = True) -> None:
         _print(f"  · …另有 {len(report.notes) - 8} 条说明")
 
 
+_SCREENSHOT_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
+
+
+def _collect_screenshots(values: Any) -> tuple[str, ...]:
+    paths: list[Path] = []
+    seen: set[Path] = set()
+    for value in values or ():
+        path = Path(str(value)).expanduser()
+        if path.is_dir():
+            found = sorted(
+                item
+                for item in path.iterdir()
+                if item.is_file() and item.suffix.lower() in _SCREENSHOT_SUFFIXES
+            )
+            if not found:
+                raise PgfError(f"截图目录里没有 PNG/JPEG/WebP: {path}")
+        elif path.is_file():
+            found = [path]
+        else:
+            raise PgfError(f"截图不存在: {path}")
+        for item in found:
+            resolved = item.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            paths.append(resolved)
+    return tuple(str(path) for path in paths)
+
+
 def _make_options(args: argparse.Namespace) -> PipelineOptions:
     return PipelineOptions(
         path=Path(args.path),
@@ -96,6 +125,9 @@ def _make_options(args: argparse.Namespace) -> PipelineOptions:
         style_preset=getattr(args, "preset", "paper_dark") or "paper_dark",
         entry_mode=getattr(args, "entry_mode", "") or "",
         theme_path=getattr(args, "theme", "") or "",
+        screenshots=_collect_screenshots(getattr(args, "screenshots", None)),
+        vision_endpoint=getattr(args, "vision_endpoint", "") or "",
+        vision_model=getattr(args, "vision_model", "") or "",
     )
 
 
@@ -380,6 +412,13 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
                         help="在图上显示 if 条件表达式（默认隐藏，避免剧透）")
     parser.add_argument("--theme", default="",
                         help="JSON 主题文件（覆盖颜色/字号/圆角等，见 pgf theme）")
+    parser.add_argument("--screenshots", action="append", default=[],
+                        metavar="PATH",
+                        help="游戏截图或截图目录（可重复），用于可选的视觉模型风格分析")
+    parser.add_argument("--vision-endpoint", default="",
+                        help="OpenAI 兼容 chat/completions 地址（默认 PGF_VISION_ENDPOINT）")
+    parser.add_argument("--vision-model", default="",
+                        help="视觉模型名（默认 PGF_VISION_MODEL；密钥用 PGF_VISION_API_KEY）")
     parser.add_argument("--json", action="store_true", help="输出 JSON")
 
 

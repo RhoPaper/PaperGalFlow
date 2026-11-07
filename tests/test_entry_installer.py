@@ -213,6 +213,17 @@ class InstallerTests(unittest.TestCase):
         problems = static_check([GeneratedFile("pgf_ui/../evil.png", role="asset")])
         self.assertTrue(problems)
 
+    def test_static_check_reports_missing_asset_reference(self) -> None:
+        screen = (
+            "# PaperGalFlow test\n"
+            'screen pgf_flowchart():\n'
+            '    add Frame("pgf_ui/missing.png", 10, 10)\n'
+        )
+        problems = static_check(
+            [GeneratedFile("pgf_flowchart_screen.rpy", screen, "screen"), self.asset_file()]
+        )
+        self.assertTrue(any("missing generated assets" in problem for problem in problems))
+
     def test_static_check_rejects_bad_name(self) -> None:
         problems = static_check([GeneratedFile("../evil.rpy", "x\n")])
         self.assertTrue(problems)

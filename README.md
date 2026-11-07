@@ -6,9 +6,9 @@
 
 为 Ren'Py Galgame 生成「柚子社式剧情流程图」的模块化工具。
 
-PaperGalFlow 解析游戏脚本，还原 label / 选项 / 条件分支 / 结局之间的剧情图，按游戏自身的 UI 颜色与字体做布局，然后把流程图**固化**成若干个 `pgf_*.rpy` 文件写进游戏目录。游戏运行时不再解析脚本，也不依赖外部进程；删除生成文件即回滚。
+PaperGalFlow 解析游戏脚本，还原 label / 选项 / 条件分支 / 结局之间的剧情图，按游戏自身的 UI 颜色与字体做布局，然后把流程图**固化**成若干 `pgf_*` 文件（screen、入口 hook、九宫格 PNG）写进游戏目录。游戏运行时不再解析脚本，也不依赖外部进程；删除生成文件即回滚。
 
-> 当前版本：**v0.4.2**（首个可用版本为 v0.1.0）。首期只支持 Ren'Py 8.x；已在 Linux + Ren'Py 8.6 上用《永恒与星辰与日常》和《小小的身影，重叠的内心》验证。
+> 当前版本：**v0.4.3**（首个可用版本为 v0.1.0）。首期只支持 Ren'Py 8.x；已在 Linux + Ren'Py 8.6 上用《永恒与星辰与日常》和《小小的身影，重叠的内心》验证。
 
 ## 功能
 
@@ -19,6 +19,7 @@ PaperGalFlow 解析游戏脚本，还原 label / 选项 / 条件分支 / 结局�
 - **风格提取**：读取游戏的 `gui.rpy` / `screens.rpy`（或 `.rpyc`）中的颜色、字体、字号、按钮状态，并直接采样游戏自己的 UI PNG（`dialog_bg`、选项按钮、快捷菜单按钮），按中心区域取色，识别渐变/半透明面板与九宫格边框；无面板引用时还会扫描 `.rpa`（含 `images.rpa`）里的候选 UI 图。证据不足时回退到内置主题。
 - **最小侵入入口**：源码可读时复制并包装 `quick_menu`，在其后追加“流程图”按钮；只有编译脚本时在快捷菜单旁绘制一个同样风格的悬浮按钮；F10 热键始终可用。
 - **可回滚**：安装清单、SHA-256 校验、原子写入；`pgf uninstall` 同时删除 Ren'Py 编译产生的 `.rpyc`。
+- **可选截图分析**：`--screenshots` 把游戏截图交给 OpenAI 兼容的视觉模型，结果与本地 GUI/PNG 证据按置信度融合；未配置后端时完全离线，不发任何请求。
 - **主题与离线预览**：`pgf theme` 导出 JSON 模板，`pgf preview/build/install --theme theme.json` 覆盖颜色、字号、圆角/边框与节点配色；`pgf preview` 生成与游戏内布局/配色一致的 HTML+SVG，便于在没有启动游戏时检查。
 
 ## 模块
@@ -27,7 +28,7 @@ PaperGalFlow 解析游戏脚本，还原 label / 选项 / 条件分支 / 结局�
 | --- | --- | --- |
 | `pgf-core` | `pgf_core` | 引擎无关的剧情图、节点状态机、布局、持久化接口、降级链调度、适配器协议、CLI、离线预览 |
 | `pgf-adapter-renpy` | `pgf_adapter_renpy` | Ren'Py 适配器：RPA/RPYC/RPY 解析、剧情图分析、UI 探测、screen 生成、入口注入、安装/卸载 |
-| `pgf-style` | `pgf_style` | 风格 token 模型、颜色工具、证据融合、预置主题、Ren'Py 样式翻译 |
+| `pgf-style` | `pgf_style` | 风格 token 模型、颜色/区域采样、证据融合、JSON 主题、截图视觉后端、预置主题、Ren'Py 样式翻译 |
 
 依赖方向：`pgf-adapter-renpy → pgf-core + pgf-style`，`pgf-style → 标准库`，`pgf-core → 标准库 + pgf-style`。CLI 只导入 `pgf_core`，适配器通过 `pgf.adapters` entry point 或 `PGF_ADAPTERS` 环境变量注册。
 
@@ -88,20 +89,20 @@ pgf preview "/home/rhopaper/.local/share/Steam/steamapps/common/小小的身影�
 
 | 文件 | 作用 |
 | --- | --- |
-| `pgf_flowchart_screen.rpy` | 流程图 screen、内嵌的运行时状态机、预计算的节点/连线/样式数据、label 回调 |
+| `pgf_flowchart_screen.rpy` | 流程图 screen、预计算的节点/连线/样式/UI 资产路径、只读状态与历史辅助函数 |
 | `pgf_menu_hook.rpy` | 入口：quick_menu 源码改写或悬浮按钮 + F10 热键 |
 | `pgf_ui/*.png` | 25 个九宫格 UI 资产：节点/悬停、图例、阴影、面板、按钮、入口按钮 |
 | `pgf_manifest.json` | 安装清单（版本、入口模式、文件哈希），供 `status` / `uninstall` 使用 |
 
-Ren'Py 首次运行后会额外生成同名的 `.rpyc`。**手动回滚时请同时删除 `.rpy` 和 `.rpyc`**，否则 Ren'Py 仍会加载残留的编译文件；使用 `pgf uninstall` 则会自动处理。
+Ren'Py 首次运行后会额外生成同名的 `.rpyc`。**手动回滚时请同时删除 `.rpy`、`.rpyc` 和 `pgf_ui/`**，否则 Ren'Py 仍会加载残留的编译文件；使用 `pgf uninstall` 则会自动处理。
 
 ## 降级链
 
 PaperGalFlow 的 Core 统一编排三条链路，适配器只报告每一步的成功/失败：
 
-- **剧情数据**：游戏脚本解析 → AI 截图分析（本版本未配置后端）→ 预置占位图。
-- **样式**：游戏 GUI/PNG 采样 → AI 截图分析（本版本未配置后端）→ 内置主题。
-- **入口**：`quick_menu` 源码追加 → AI 辅助改写（本版本未配置后端）→ 悬浮按钮。F10 热键始终随入口一起安装，作为最后的可达性保底。
+- **剧情数据**：游戏脚本解析 → AI 截图分析（剧情链当前未配置）→ 预置占位图。
+- **样式**：游戏 GUI/PNG 采样（可选叠加截图视觉分析）→ 仅截图视觉分析 → 内置主题。
+- **入口**：`quick_menu` 源码追加 → AI 辅助改写（当前未配置）→ 悬浮按钮。F10 热键始终随入口一起安装，作为最后的可达性保底。
 
 每一步的结果都会在 `pgf inspect/install --json` 和终端输出里列出，方便判断当前游戏实际走了哪条路径。
 
@@ -112,7 +113,8 @@ PaperGalFlow 的 Core 统一编排三条链路，适配器只报告每一步的�
 | Linux x86_64、Ren'Py 8.6.0（游戏自带运行时） | ✅ 解析、生成、lint、实际启动、打开流程图、节点跳转、关闭、缩放、滚动 |
 | 《永恒与星辰与日常》：仅 `.rpyc`、2560×1440、自定义快捷菜单图标、`images.rpa` | ✅ 45 节点 / 54 连线 / 4 结局；入口走悬浮按钮 |
 | 《小小的身影，重叠的内心》：仅 `.rpyc`、1920×1080、粉白主题、两张结局 | ✅ 25 节点 / 30 连线 / 2 结局；主题与按钮位置来自游戏 UI 采样 |
-| 单元/集成测试 | ✅ 188 项（两个游戏的测试在未安装时自动 skip） |
+| v0.4.3 九宫格 UI / 主题 / 回滚 | ✅ 实际启动打开流程图；节点 → 游戏确认框 → `RollbackToIdentifier` 回到起点；两游戏 lint 通过 |
+| 单元/集成测试 | ✅ 247 项（两个游戏的测试在未安装时自动 skip） |
 
 Windows 原生尚未验证；代码只使用 `pathlib`、`zlib`、`pickle` 白名单反序列化等标准库能力，不依赖 POSIX 路径、符号链接或外部进程。建议在 Windows 上：
 
@@ -180,6 +182,7 @@ cd "/path/to/game"
 - `0.4.0` 九宫格圆角资产：纯 Python 生成 PNG，`Frame` 渲染节点/面板，柔和阴影；安装器支持二进制资产
 - `0.4.1` UI 采样增强：中心区域取色、渐变/半透明识别、九宫格边框探测、`images.rpa` 面板扫描
 - `0.4.2` JSON 主题文件、`pgf theme` 模板生成、`--theme` 应用与预览联动
+- `0.4.3` 可选截图视觉分析后端、置信度融合、`screenshot` 风格降级链
 
 ## 许可证
 

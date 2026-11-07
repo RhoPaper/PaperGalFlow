@@ -236,9 +236,23 @@ class Adapter(Protocol):
 
     def preset_graph(self, info: AdapterInfo) -> StoryResult: ...
 
-    def build_style(self, info: AdapterInfo, *, preset: str = "paper_dark") -> StyleResult: ...
+    def build_style(
+        self,
+        info: AdapterInfo,
+        *,
+        preset: str = "paper_dark",
+        screenshots: tuple[Path, ...] = (),
+        vision_options: dict[str, Any] | None = None,
+    ) -> StyleResult: ...
 
-    def screenshot_style(self, info: AdapterInfo) -> StyleResult | None: ...
+    def screenshot_style(
+        self,
+        info: AdapterInfo,
+        *,
+        screenshots: tuple[Path, ...] = (),
+        vision_options: dict[str, Any] | None = None,
+        preset: str = "paper_dark",
+    ) -> StyleResult | None: ...
 
     def plan_entry(
         self,

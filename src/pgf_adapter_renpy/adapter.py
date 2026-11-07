@@ -25,7 +25,14 @@ from pgf_core.errors import AdapterError
 from pgf_core.layout import Layout
 from pgf_core.model import FlowGraph, FlowNode, NodeKind
 from pgf_core.version import __version__
-from pgf_style import StyleTokens, tokens_from_evidence
+from pgf_style import (
+    StyleTokens,
+    VisionError,
+    fuse_vision,
+    tokens_from_evidence,
+    vision_backend,
+    vision_tokens,
+)
 
 from .analyze import AnalyzeOptions, AnalyzeResult, build_graph
 from .archive import ArchiveError, GameArchive
@@ -215,11 +222,46 @@ class RenPyAdapter:
         )
 
     # -- style ---------------------------------------------------------------
-    def build_style(self, info: AdapterInfo, *, preset: str = "paper_dark") -> StyleResult:
+    def _vision_backend(self, vision_options: dict[str, Any] | None):
+        options = vision_options or {}
+        return vision_backend(
+            endpoint=str(options.get("endpoint", "")),
+            model=str(options.get("model", "")),
+            transport=options.get("transport"),
+        )
+
+    def build_style(
+        self,
+        info: AdapterInfo,
+        *,
+        preset: str = "paper_dark",
+        screenshots: tuple[Path, ...] = (),
+        vision_options: dict[str, Any] | None = None,
+    ) -> StyleResult:
         scripts = self._ensure_scripts(info)
         archive = self._ensure_archive(info)
         probe = probe_style(scripts, archive)
         tokens = tokens_from_evidence(probe.evidence, preset=preset)
+        warnings = list(probe.warnings)
+        notes = list(probe.notes)
+        vision_data: dict[str, Any] | None = None
+        if screenshots:
+            backend = self._vision_backend(vision_options)
+            if backend is None:
+                warnings.append(
+                    "screenshots were supplied but the vision backend is not configured; "
+                    "using local GUI/asset evidence only"
+                )
+            else:
+                try:
+                    vision = backend.analyze(screenshots)
+                    tokens = fuse_vision(tokens, vision)
+                    vision_data = vision.to_dict()
+                    notes.append(
+                        f"vision {vision.model} fused at confidence {vision.confidence:.2f}"
+                    )
+                except (VisionError, OSError) as exc:
+                    warnings.append(f"vision analysis failed: {exc}")
         self._probe = probe
         self._tokens = tokens
         info.extra["style_source"] = tokens.source
@@ -232,19 +274,47 @@ class RenPyAdapter:
                 "has_source": probe.quick_menu.has_source,
                 "bbox": list(probe.quick_menu.bbox) if probe.quick_menu.bbox else None,
             }
-        warnings = list(probe.warnings)
+        evidence = {
+            **probe.evidence.summary(),
+            "samples": [sample.to_dict() for sample in probe.evidence.ui_samples],
+        }
+        if vision_data is not None:
+            evidence["vision"] = vision_data
         return StyleResult(
             tokens=tokens,
             warnings=warnings,
-            notes=list(probe.notes),
-            evidence={
-                **probe.evidence.summary(),
-                "samples": [sample.to_dict() for sample in probe.evidence.ui_samples],
-            },
+            notes=notes,
+            evidence=evidence,
         )
 
-    def screenshot_style(self, info: AdapterInfo) -> StyleResult | None:
-        return None
+    def screenshot_style(
+        self,
+        info: AdapterInfo,
+        *,
+        screenshots: tuple[Path, ...] = (),
+        vision_options: dict[str, Any] | None = None,
+        preset: str = "paper_dark",
+    ) -> StyleResult | None:
+        if not screenshots:
+            return None
+        backend = self._vision_backend(vision_options)
+        if backend is None:
+            raise AdapterError(
+                "screenshot style needs a vision backend: set PGF_VISION_ENDPOINT "
+                "and PGF_VISION_MODEL (plus PGF_VISION_API_KEY when required)"
+            )
+        try:
+            vision = backend.analyze(screenshots)
+        except (VisionError, OSError) as exc:
+            raise AdapterError(f"vision analysis failed: {exc}") from exc
+        tokens = vision_tokens(vision, preset=preset)
+        self._tokens = tokens
+        return StyleResult(
+            tokens=tokens,
+            warnings=[],
+            notes=[f"vision-only style from {vision.model}"],
+            evidence={"vision": vision.to_dict()},
+        )
 
     # -- entry ---------------------------------------------------------------
     def plan_entry(
@@ -268,7 +338,7 @@ class RenPyAdapter:
             return EntryResult(
                 mode=mode,
                 available=False,
-                reason="AI 辅助改写需要外部的视觉/语言模型后端，本版本未配置",
+                reason="AI 辅助改写需要外部语言模型后端，当前未配置",
             )
         if mode == "quick_menu_patch":
             quick = probe.quick_menu

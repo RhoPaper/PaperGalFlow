@@ -151,7 +151,9 @@ def static_check(files: Iterable[GeneratedFile]) -> list[str]:
 
     problems: list[str] = []
     seen: set[str] = set()
-    for generated in files:
+    generated_files = list(files)
+    asset_names = {item.name for item in generated_files if not _is_rpy(item.name)}
+    for generated in generated_files:
         if generated.name in seen:
             problems.append(f"duplicate generated file name: {generated.name}")
         seen.add(generated.name)
@@ -166,6 +168,13 @@ def static_check(files: Iterable[GeneratedFile]) -> list[str]:
             continue
         if not generated.content.endswith("\n"):
             problems.append(f"{generated.name}: file does not end with a newline")
+        if asset_names:
+            referenced = set(re.findall(r"pgf_ui/[A-Za-z0-9_.-]+\.png", generated.content))
+            missing = sorted(referenced - asset_names)
+            if missing:
+                problems.append(
+                    f"{generated.name}: references missing generated assets: {', '.join(missing)}"
+                )
         try:
             script = parse_script(generated.content, generated.name)
         except Exception as exc:  # pragma: no cover - defensive

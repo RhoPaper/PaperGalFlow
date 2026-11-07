@@ -4,7 +4,7 @@ import unittest
 
 from pgf_adapter_renpy.rpy_text import parse_script
 from pgf_adapter_renpy.script_model import ScriptFile
-from pgf_adapter_renpy.screen_emit import FlowchartEmitOptions, emit_flowchart_screen
+from pgf_adapter_renpy.screen_emit import FlowchartEmitOptions, _fit_title, emit_flowchart_screen
 from pgf_adapter_renpy.analyze import build_graph
 from pgf_core.layout import compute_layout
 from pgf_style import preset_tokens
@@ -131,6 +131,24 @@ class EmitTests(unittest.TestCase):
     def test_no_unsafe_characters_in_screen_names(self) -> None:
         self.assertIn('screen pgf_flowchart():', self.file.content)
         self.assertIn('key "game_menu" action Return()', self.file.content)
+
+
+class TitleFitTests(unittest.TestCase):
+    def test_short_title_has_no_break(self) -> None:
+        self.assertEqual(_fit_title("我先下班了。", 215, 23), "我先下班了。")
+
+    def test_long_title_uses_at_most_two_lines(self) -> None:
+        fitted = _fit_title("看着短信里到账的提示，要拿这笔钱做什么好呢？", 215, 23)
+        self.assertLessEqual(fitted.count("\n"), 1)
+        self.assertTrue(fitted.endswith("…"))
+        width = max(len(line) for line in fitted.splitlines())
+        self.assertLessEqual(width, 10)
+
+    def test_theme_font_size_changes_wrapping(self) -> None:
+        text = "之后，我们一起在服装店里逛了一圈。"
+        small = _fit_title(text, 215, 18)
+        large = _fit_title(text, 215, 28)
+        self.assertGreaterEqual(len(small), len(large))
 
 
 class AnalyzeToEmitTests(unittest.TestCase):

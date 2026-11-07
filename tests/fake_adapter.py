@@ -48,10 +48,10 @@ class FakeAdapter:
     def preset_graph(self, info):
         return StoryResult(graph=tiny_graph(), source="preset", notes=["fake preset"])
 
-    def build_style(self, info, *, preset="paper_dark"):
+    def build_style(self, info, *, preset="paper_dark", screenshots=(), vision_options=None):
         raise AdapterError("fake game has no GUI")
 
-    def screenshot_style(self, info):
+    def screenshot_style(self, info, *, screenshots=(), vision_options=None, preset="paper_dark"):
         return None
 
     def plan_entry(self, info, graph, tokens, *, mode, options=None):
