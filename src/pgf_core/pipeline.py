@@ -57,6 +57,7 @@ class PipelineOptions:
     style_preset: str = "paper_dark"
     entry_mode: str = ""
     title: str = ""
+    theme_path: str = ""
 
     def normalized(self) -> "PipelineOptions":
         return PipelineOptions(
@@ -68,6 +69,7 @@ class PipelineOptions:
             style_preset=self.style_preset.strip() or "paper_dark",
             entry_mode=self.entry_mode.strip(),
             title=self.title.strip(),
+            theme_path=self.theme_path.strip(),
         )
 
 
@@ -138,6 +140,7 @@ class Pipeline:
 
         story, story_chain = self._story_chain(info)
         style, style_chain = self._style_chain(info)
+        style = self._apply_theme(style, style_chain)
         layout = compute_layout(story.graph)
         entry, entry_chain = self._entry_chain(info, story, style)
         emitted = self.adapter.emit(
@@ -172,6 +175,28 @@ class Pipeline:
             warnings=self.warnings,
             notes=self.notes,
         )
+
+    # -- theme ---------------------------------------------------------------
+    def _apply_theme(self, style: StyleResult, chain: ChainReport) -> StyleResult:
+        if not self.options.theme_path:
+            return style
+        from .theme import ThemeError, apply_theme, load_theme
+
+        try:
+            theme = load_theme(self.options.theme_path)
+            tokens = apply_theme(style.tokens, theme)
+        except ThemeError as exc:
+            raise PipelineError(str(exc)) from exc
+        style.tokens = tokens
+        style.notes.append(f"theme applied: {theme.name or theme.source}")
+        chain.add(
+            "theme",
+            STATUS_SUCCESS,
+            f"theme {theme.name or 'custom'}",
+            path=theme.source,
+            source=tokens.source,
+        )
+        return style
 
     # -- chains --------------------------------------------------------------
     def _story_chain(self, info: AdapterInfo) -> tuple[StoryResult, ChainReport]:

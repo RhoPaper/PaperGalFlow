@@ -6,6 +6,28 @@ gets its own version so the history stays traceable.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-01
+
+### Added
+
+- **JSON theme files.**  `--theme theme.json` can now be passed to `inspect`,
+  `build`, `install` and `preview`.  Themes override colours, typography,
+  layout, edges, per-state palettes and nine-patch geometry; they can either
+  build on the game's extracted style or start from a preset.  Unknown keys,
+  invalid colours and malformed JSON fail with a readable error instead of
+  generating broken code.
+- **`pgf theme` template generator.**  `pgf theme --preset paper_light --out
+  theme.json` writes a complete, editable document; without `--out` it prints
+  JSON to stdout.
+- The offline preview honours the theme's corner radius, border width and a
+  soft-shadow SVG filter, and the HTML page uses the themed radius.
+
+### Changed
+
+- Theme application is recorded as a `theme` step in the style chain and as a
+  note in `pgf inspect --json`; `PGF_STYLE`/`PGF_UI` and the generated assets
+  all follow the themed tokens.
+
 ## [0.4.1] - 2026-11-01
 
 ### Added

@@ -130,6 +130,15 @@ class PreviewTests(unittest.TestCase):
         self.assertIn("<svg", html)
         self.assertIn("PaperGalFlow", html)
 
+    def test_preview_honours_theme_geometry(self) -> None:
+        graph = view_graph()
+        layout = compute_layout(graph)
+        tokens = preset_tokens().merged(corner_radius=20, border_width=3)
+        svg = render_svg(graph, layout, tokens)
+        self.assertIn('rx="18"', svg)
+        self.assertIn("pgf-soft-shadow", svg)
+        self.assertIn('stroke-width="3"', svg)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -22,7 +22,7 @@
 ```
 
 - `pgf-core` 不知道 Ren'Py 的存在；它只消费适配器返回的 `AdapterInfo / StoryResult / StyleResult / EntryResult / EmitResult / InstallResult`。
-- `pgf-style` 是引擎无关的 token 层 + 一个单独的 `renpy_theme.py` 翻译器；后者是首期唯一知道目标引擎的 style 文件。
+- `pgf-style` 是引擎无关的 token 层 + 一个单独的 `renpy_theme.py` 翻译器；后者是首期唯一知道目标引擎的 style 文件。`theme.py` 负责校验 JSON 主题并把覆盖应用到 token 上，CLI 通过 `pgf_core.theme` 门面调用。
 - `pgf-adapter-renpy` 通过 entry point `pgf.adapters`（或 `PGF_ADAPTERS=module:Class`）注册到 Core 的注册表。
 
 ## Core 数据模型
@@ -80,7 +80,8 @@ FlowGraph
    │
    ├── style_probe.py：gui.* define、style、screen 树、gui.init、PNG 采样
    │        ▼
-   │   pgf_style.tokens_from_evidence → StyleTokens → build_theme → Ren'Py 样式片段
+   │   pgf_style.tokens_from_evidence → StyleTokens →（可选）theme.apply_theme
+   │        → build_theme → Ren'Py 样式片段
    │
    ├── compute_layout
    │

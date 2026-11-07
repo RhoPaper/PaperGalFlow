@@ -17,6 +17,7 @@ from .errors import PgfError
 from .pipeline import Pipeline, PipelineOptions, PipelineReport, write_artifacts
 from .preview import render_html
 from .state import kernel_for_graph
+from .theme import theme_document, write_theme
 from .version import __version__
 
 _MARKS = {
@@ -94,6 +95,7 @@ def _make_options(args: argparse.Namespace) -> PipelineOptions:
         show_condition_labels=bool(getattr(args, "show_condition_labels", False)),
         style_preset=getattr(args, "preset", "paper_dark") or "paper_dark",
         entry_mode=getattr(args, "entry_mode", "") or "",
+        theme_path=getattr(args, "theme", "") or "",
     )
 
 
@@ -313,6 +315,19 @@ def _cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_theme(args: argparse.Namespace) -> int:
+    from .theme import preset_tokens
+
+    tokens = preset_tokens(args.preset)
+    if args.out:
+        path = write_theme(args.out, tokens)
+        _print(f"主题模板已写入 {path.resolve()}")
+        _print("修改后用: pgf preview <游戏> --theme " + str(path))
+    else:
+        _dump_json(theme_document(tokens))
+    return 0
+
+
 def _cmd_preview(args: argparse.Namespace) -> int:
     report = _run_pipeline(args)
     seen = [item.strip() for item in (args.seen or "").split(",") if item.strip()]
@@ -363,6 +378,8 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
                         help="包含仅通过 call 到达的支线 label")
     parser.add_argument("--show-condition-labels", action="store_true",
                         help="在图上显示 if 条件表达式（默认隐藏，避免剧透）")
+    parser.add_argument("--theme", default="",
+                        help="JSON 主题文件（覆盖颜色/字号/圆角等，见 pgf theme）")
     parser.add_argument("--json", action="store_true", help="输出 JSON")
 
 
@@ -412,6 +429,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--adapter", default="")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=_cmd_status)
+
+    p = sub.add_parser("theme", help="生成可编辑的 JSON 主题模板")
+    p.add_argument("--preset", default="paper_dark", choices=("paper_dark", "paper_light"),
+                   help="模板的基准主题（默认 paper_dark）")
+    p.add_argument("--out", default="", help="写入路径；省略则打印到标准输出")
+    p.set_defaults(func=_cmd_theme)
 
     p = sub.add_parser("preview", help="生成离线 HTML 预览")
     _add_common(p)

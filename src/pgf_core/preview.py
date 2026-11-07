@@ -92,10 +92,13 @@ def render_svg(
     width = layout.width + margin * 2
     height = layout.height + margin * 2
     colors = tokens
+    radius = max(4, min(18, int(getattr(tokens, "corner_radius", 8))))
     parts: list[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
         f'viewBox="0 0 {width} {height}" font-family="\'Noto Sans CJK SC\', \'Microsoft YaHei\', \'PingFang SC\', sans-serif">',
         "<defs>",
+        '<filter id="pgf-soft-shadow" x="-30%" y="-30%" width="160%" height="160%">'
+        '<feGaussianBlur stdDeviation="5"/></filter>',
     ]
     edge_colors = {
         "flow": tokens.edge,
@@ -140,7 +143,7 @@ def render_svg(
         text = edge.label if len(edge.label) <= 26 else edge.label[:25] + "…"
         parts.append(
             f'<rect x="{x - max(10, len(text) * 8)}" y="{y - 13}" width="{max(20, len(text) * 16)}" '
-            f'height="26" rx="5" fill="{tokens.panel}" opacity="0.92"/>'
+            f'height="26" rx="{min(6, radius)}" fill="{tokens.panel}" opacity="0.92"/>'
         )
         parts.append(
             f'<text x="{x}" y="{y + 5}" font-size="{tokens.edge_text_size}" '
@@ -158,14 +161,15 @@ def render_svg(
         title = "？？？" if locked else (node.title or node.subtitle or "未命名")
         parts.append(
             f'<rect x="{rect.x + 5}" y="{rect.y + 7}" width="{rect.w}" height="{rect.h}" '
-            f'rx="8" fill="{tokens.shadow}" opacity="0.55"/>'
+            f'rx="{radius}" fill="{tokens.shadow}" opacity="0.65" filter="url(#pgf-soft-shadow)"/>'
         )
         parts.append(
             f'<rect x="{rect.x}" y="{rect.y}" width="{rect.w}" height="{rect.h}" '
-            f'rx="8" fill="{palette.fill}" stroke="{palette.border}" stroke-width="2"/>'
+            f'rx="{radius}" fill="{palette.fill}" stroke="{palette.border}" '
+            f'stroke-width="{max(1, min(4, int(getattr(tokens, "border_width", 2))))}"/>'
         )
         parts.append(
-            f'<rect x="{rect.x}" y="{rect.y + 8}" width="6" height="{rect.h - 16}" '
+            f'<rect x="{rect.x + 8}" y="{rect.y + 14}" width="6" height="{rect.h - 28}" '
             f'rx="3" fill="{palette.strip}"/>'
         )
         chars = max(6, int((rect.w - 30) / max(8.0, tokens.node_text_size * 0.86)))
@@ -244,7 +248,7 @@ def render_html(
              color: {tokens.text_dim}; font-size: 15px; }}
   .legend i {{ width: 14px; height: 14px; border-radius: 4px; display: inline-block; }}
   .canvas {{ overflow: auto; padding: 22px; }}
-  svg {{ display: block; border-radius: 12px; }}
+  svg {{ display: block; border-radius: {tokens.corner_radius}px; }}
   footer {{ padding: 10px 26px 26px; color: {tokens.text_muted}; font-size: 13px; }}
 </style>
 </head>

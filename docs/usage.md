@@ -64,9 +64,20 @@ pgf build <game> --out out/game1
 
 按 manifest 删除生成的 `.rpy` 及其对应的 `.rpyc`；如果文件在安装后被修改，默认保留并告警，`--force` 强制删除。
 
-### `pgf preview <路径> --out <html>`
+### `pgf theme [--preset paper_dark|paper_light] [--out theme.json]`
 
-生成离线 HTML+SVG 预览，布局与配色来自真实生成数据。`--seen label1,label2` 可以模拟一批已读节点。预览页打开后会自动横向滚动到入口附近；在浏览器里可继续滚动/缩放查看整张图。
+生成一份完整的 JSON 主题模板。省略 `--out` 时打印到标准输出；写入文件后可直接编辑颜色、字号、圆角/边框和六个节点状态配色。
+
+```bash
+pgf theme --preset paper_light --out out/sakura.json
+pgf preview <game> --theme out/sakura.json --out out/sakura.html
+```
+
+主题字段分组：`colors`、`typography`、`geometry`、`layout`、`edges`、`chrome`、`palettes`；也可以直接写 `"accent": "#..."` 这类平坦键。`"preset": "paper_light"` 会先切换到内置主题再叠加覆盖。未知键或非法颜色会直接报错，不会生成坏代码。
+
+### `pgf preview <路径> --out <html> [--theme theme.json]`
+
+生成离线 HTML+SVG 预览，布局与配色来自真实生成数据；`--theme` 会应用主题文件，包括圆角半径、边框宽度与柔化阴影。`--seen label1,label2` 可以模拟一批已读节点。预览页打开后会自动横向滚动到入口附近；在浏览器里可继续滚动/缩放查看整张图。
 
 ## 常用参数
 
@@ -76,6 +87,7 @@ pgf build <game> --out out/game1
 | `--preset paper_dark\|paper_light` | 证据不足时使用的内置主题 |
 | `--include-side-labels` | 包含仅通过 `call` 到达的 label（默认裁剪，避免把成就/系统脚本画进剧情图） |
 | `--show-condition-labels` | 在连线上显示 `if` 条件表达式（默认隐藏，避免代码与剧透） |
+| `--theme theme.json` | 应用 JSON 主题（颜色、字号、圆角/边框、节点配色） |
 | `--entry-mode quick_menu_patch\|ai_rewrite\|overlay_button` | 强制入口模式；`ai_rewrite` 当前不可用 |
 | `--json` | 机器可读输出 |
 
