@@ -6,6 +6,7 @@ import zlib
 
 from pgf_adapter_renpy.png import (
     PngError,
+    analyze_png,
     color_stats,
     decode_png,
     encode_png,
@@ -176,3 +177,41 @@ class PngEncodeTests(unittest.TestCase):
             encode_png(0, 1, b"")
         with self.assertRaises(PngError):
             encode_png(2, 2, b"\x00" * 4)
+
+
+class RegionAnalysisTests(unittest.TestCase):
+    def test_gradient_uses_center_region(self) -> None:
+        width, height = 40, 40
+        rows = []
+        for y in range(height):
+            value = int(round(255 * (1 - y / (height - 1))))
+            rows.extend([value, value, value, 255] * width)
+        analysis = analyze_png(encode_png(width, height, bytes(rows)))
+        self.assertTrue(analysis.gradient)
+        self.assertLess(
+            int(analysis.gradient_bottom[1:3], 16),
+            int(analysis.gradient_top[1:3], 16),
+        )
+        self.assertEqual(analysis.coverage, 1.0)
+        # The centre band sits halfway through the gradient, not at either end.
+        self.assertNotEqual(analysis.center, analysis.gradient_top)
+        self.assertNotEqual(analysis.center, analysis.gradient_bottom)
+
+    def test_translucent_panel(self) -> None:
+        pixels = bytes([250, 240, 230, 128]) * 16
+        analysis = analyze_png(encode_png(4, 4, pixels))
+        self.assertAlmostEqual(analysis.coverage, 1.0)
+        self.assertAlmostEqual(analysis.opacity, 0.502, places=2)
+        self.assertEqual(analysis.center, "#faf0e6")
+        self.assertTrue(analysis.translucent)
+
+    def test_nine_patch_hints_from_generated_asset(self) -> None:
+        from pgf_adapter_renpy.assets import build_ui_assets
+        from pgf_style import preset_tokens
+
+        assets = {asset.name: asset for asset in build_ui_assets(preset_tokens())}
+        analysis = analyze_png(assets["pgf_ui/panel_top.png"].data)
+        self.assertEqual((analysis.width, analysis.height), (64, 64))
+        self.assertGreaterEqual(analysis.border_width, 1)
+        self.assertGreaterEqual(max(analysis.insets), analysis.border_width)
+        self.assertLess(analysis.corner_alpha, 1.0)

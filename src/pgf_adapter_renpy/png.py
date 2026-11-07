@@ -19,6 +19,7 @@ import zlib
 from dataclasses import dataclass
 
 from pgf_core.errors import PgfError
+from pgf_style import parse_color
 
 __all__ = [
     "PngError",
@@ -27,6 +28,8 @@ __all__ = [
     "decode_png",
     "encode_png",
     "color_stats",
+    "analyze_png",
+    "PngAnalysis",
     "png_size",
 ]
 
@@ -382,3 +385,246 @@ def is_generated_asset(data: bytes) -> bool:
     """True when *data* is a PaperGalFlow generated PNG (marker in header)."""
 
     return data.startswith(PNG_SIGNATURE) and _MARKER_KEY + b"\x00" + _MARKER_VALUE in data[:2048]
+
+
+# ---------------------------------------------------------------------------
+# UI region analysis (gradient / translucency / nine-patch hints)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PngAnalysis:
+    """Region aware colour analysis of one UI asset."""
+
+    width: int
+    height: int
+    average: str
+    dominant: str
+    center: str
+    edge: str
+    coverage: float
+    gradient: bool
+    gradient_top: str
+    gradient_bottom: str
+    insets: tuple[int, int, int, int] = (0, 0, 0, 0)
+    border_width: int = 0
+    corner_radius: int = 0
+    corner_alpha: float = 1.0
+    opacity: float = 1.0
+
+    @property
+    def translucent(self) -> bool:
+        return self.coverage < 0.98 or self.opacity < 0.98
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "width": self.width,
+            "height": self.height,
+            "average": self.average,
+            "dominant": self.dominant,
+            "center": self.center,
+            "edge": self.edge,
+            "coverage": round(self.coverage, 3),
+            "gradient": self.gradient,
+            "gradient_top": self.gradient_top,
+            "gradient_bottom": self.gradient_bottom,
+            "insets": list(self.insets),
+            "border_width": self.border_width,
+            "corner_radius": self.corner_radius,
+            "corner_alpha": round(self.corner_alpha, 3),
+            "opacity": round(self.opacity, 3),
+            "translucent": self.translucent,
+        }
+
+
+def _rgba_at(pixels: bytes, width: int, x: int, y: int) -> tuple[int, int, int, int]:
+    base = (y * width + x) * 4
+    return pixels[base], pixels[base + 1], pixels[base + 2], pixels[base + 3]
+
+
+def _weighted_color(samples: list[tuple[int, int, int, int]]) -> str:
+    total = 0
+    reds = greens = blues = 0
+    for red, green, blue, alpha in samples:
+        if alpha < 8:
+            continue
+        total += alpha
+        reds += red * alpha
+        greens += green * alpha
+        blues += blue * alpha
+    if not total:
+        return ""
+    return _hex(int(round(reds / total)), int(round(greens / total)), int(round(blues / total)))
+
+
+def _color_distance(first: tuple[int, int, int, int], second: tuple[int, int, int, int]) -> int:
+    return max(abs(first[index] - second[index]) for index in range(3))
+
+
+def _side_run(
+    pixels: bytes,
+    width: int,
+    height: int,
+    side: str,
+) -> tuple[int, int]:
+    """Return ``(run, max_run)`` of the uniform edge band on one side."""
+
+    limit = max(1, min(width, height) // 4)
+    if side == "left":
+        points = [(x, height // 2) for x in range(limit)]
+    elif side == "right":
+        points = [(width - 1 - x, height // 2) for x in range(limit)]
+    elif side == "top":
+        points = [(width // 2, y) for y in range(limit)]
+    else:
+        points = [(width // 2, height - 1 - y) for y in range(limit)]
+    first = _rgba_at(pixels, width, *points[0])
+    if first[3] < 16:
+        count = 0
+        for point in points:
+            if _rgba_at(pixels, width, *point)[3] < 16:
+                count += 1
+            else:
+                break
+        return count, limit
+    count = 0
+    for point in points:
+        value = _rgba_at(pixels, width, *point)
+        if value[3] < 16 or _color_distance(first, value) > 28:
+            break
+        count += 1
+    return count, limit
+
+
+def _corner_radius(pixels: bytes, width: int, height: int) -> int:
+    """Estimate a rounded corner from transparent pixels, if present."""
+
+    if _rgba_at(pixels, width, 0, 0)[3] > 64:
+        return 0
+    horizontal = 0
+    for x in range(min(width, height) // 2):
+        if _rgba_at(pixels, width, x, 0)[3] >= 128:
+            horizontal = x
+            break
+    vertical = 0
+    for y in range(min(width, height) // 2):
+        if _rgba_at(pixels, width, 0, y)[3] >= 128:
+            vertical = y
+            break
+    return max(horizontal, vertical)
+
+
+def analyze_png(data: bytes, max_pixels: int = 1_500_000) -> PngAnalysis:
+    """Decode a UI asset and report region colours and nine-patch hints."""
+
+    original_width, original_height = png_size(data)
+    rows = max(1, min(original_height, max(1, max_pixels // max(1, original_width))))
+    image = decode_png(data, max_rows=rows)
+    width, height = image.width, image.height
+    pixels = image.pixels
+    total = width * height
+    opaque = 0
+    sum_r = sum_g = sum_b = 0
+    weighted = 0
+    alpha_total = 0
+    counts: dict[tuple[int, int, int], int] = {}
+    bucket_sums: dict[tuple[int, int, int], list[int]] = {}
+    center_samples: list[tuple[int, int, int, int]] = []
+    top_samples: list[tuple[int, int, int, int]] = []
+    bottom_samples: list[tuple[int, int, int, int]] = []
+    edge_samples: list[tuple[int, int, int, int]] = []
+    top_band = max(1, height // 8)
+    left = int(width * 0.3)
+    right = max(left + 1, int(width * 0.7))
+    upper = int(height * 0.3)
+    lower = max(upper + 1, int(height * 0.7))
+    edge = max(1, min(3, min(width, height) // 20))
+
+    for y in range(height):
+        for x in range(width):
+            red, green, blue, alpha = _rgba_at(pixels, width, x, y)
+            alpha_total += alpha
+            if alpha < 8:
+                continue
+            opaque += 1
+            sum_r += red * alpha
+            sum_g += green * alpha
+            sum_b += blue * alpha
+            weighted += alpha
+            if alpha >= 128:
+                key = (red >> 3, green >> 3, blue >> 3)
+                counts[key] = counts.get(key, 0) + 1
+                bucket = bucket_sums.setdefault(key, [0, 0, 0, 0])
+                bucket[0] += 1
+                bucket[1] += red
+                bucket[2] += green
+                bucket[3] += blue
+            if left <= x < right and upper <= y < lower:
+                center_samples.append((red, green, blue, alpha))
+            if y < top_band and left <= x < right:
+                top_samples.append((red, green, blue, alpha))
+            if y >= height - top_band and left <= x < right:
+                bottom_samples.append((red, green, blue, alpha))
+            if x < edge or x >= width - edge or y < edge or y >= height - edge:
+                edge_samples.append((red, green, blue, alpha))
+
+    if weighted:
+        average = _hex(
+            int(round(sum_r / weighted)),
+            int(round(sum_g / weighted)),
+            int(round(sum_b / weighted)),
+        )
+    else:
+        average = "#00000000"
+    if counts:
+        best = max(counts, key=counts.get)
+        count, reds, greens, blues = bucket_sums[best]
+        dominant = _hex(
+            int(round(reds / count)), int(round(greens / count)), int(round(blues / count))
+        )
+    else:
+        dominant = average
+
+    center = _weighted_color(center_samples) or average
+    edge_color = _weighted_color(edge_samples) or dominant
+    gradient_top = _weighted_color(top_samples) or average
+    gradient_bottom = _weighted_color(bottom_samples) or average
+    top_rgba = parse_color(gradient_top) or (0, 0, 0, 0)
+    bottom_rgba = parse_color(gradient_bottom) or (0, 0, 0, 0)
+    gradient = _color_distance(top_rgba, bottom_rgba) > 26
+
+    runs = {side: _side_run(pixels, width, height, side) for side in ("left", "top", "right", "bottom")}
+    values = [run for run, _limit in runs.values()]
+    limits = [limit for _run, limit in runs.values()]
+    border_candidates = [run for run in values if 0 < run <= 6 and run < min(limits)]
+    border_width = min(border_candidates) if len(border_candidates) == 4 else 0
+    radius = _corner_radius(pixels, width, height)
+    inset_value = max([radius] + [run for run in values if run < min(limits)])
+    insets = (inset_value, inset_value, inset_value, inset_value)
+    if border_width:
+        # A visible border line sits inside the fixed nine-patch slice.
+        insets = tuple(max(inset_value, border_width) for _ in range(4))  # type: ignore[assignment]
+    corner_samples = [
+        _rgba_at(pixels, width, 0, 0),
+        _rgba_at(pixels, width, width - 1, 0),
+        _rgba_at(pixels, width, 0, height - 1),
+        _rgba_at(pixels, width, width - 1, height - 1),
+    ]
+    corner_alpha = sum(sample[3] for sample in corner_samples) / 4.0 / 255.0
+    return PngAnalysis(
+        width=original_width,
+        height=original_height,
+        average=average,
+        dominant=dominant,
+        center=center,
+        edge=edge_color,
+        coverage=opaque / total if total else 0.0,
+        gradient=gradient,
+        gradient_top=gradient_top,
+        gradient_bottom=gradient_bottom,
+        insets=insets,  # type: ignore[arg-type]
+        border_width=border_width,
+        corner_radius=radius,
+        corner_alpha=corner_alpha,
+        opacity=(alpha_total / total / 255.0) if total else 0.0,
+    )

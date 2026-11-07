@@ -23,6 +23,16 @@ class UiSample:
     alpha: float = 1.0
     width: int = 0
     height: int = 0
+    center: str = ""
+    edge: str = ""
+    insets: tuple[int, int, int, int] = ()
+    border_width: int = 0
+    corner_radius: int = 0
+    gradient: bool = False
+    gradient_top: str = ""
+    gradient_bottom: str = ""
+    coverage: float = 1.0
+    opacity: float = 1.0
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -33,6 +43,16 @@ class UiSample:
             "alpha": round(self.alpha, 3),
             "width": self.width,
             "height": self.height,
+            "center": self.center,
+            "edge": self.edge,
+            "insets": list(self.insets),
+            "border_width": self.border_width,
+            "corner_radius": self.corner_radius,
+            "gradient": self.gradient,
+            "gradient_top": self.gradient_top,
+            "gradient_bottom": self.gradient_bottom,
+            "coverage": round(self.coverage, 3),
+            "opacity": round(self.opacity, 3),
         }
 
 

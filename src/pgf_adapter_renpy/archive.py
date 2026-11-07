@@ -65,6 +65,7 @@ class GameArchive:
         self._archive_files: dict[str, tuple[RpaArchive, str]] = {}
         self._units: tuple[ScriptUnit, ...] = ()
         self._cache: dict[str, ScriptFile] = {}
+        self._assets: tuple[str, ...] | None = None
         self._excluded = tuple(str(prefix).replace("\\", "/") for prefix in exclude_prefixes)
 
         if use_archives:
@@ -186,6 +187,46 @@ class GameArchive:
 
     def exists(self, name: str) -> bool:
         return name in self._disk or name in self._archive_files or (self.game_dir / name).is_file()
+
+    def asset_names(self) -> tuple[str, ...]:
+        """Image files (disk and archive) that could carry UI style."""
+
+        if self._assets is not None:
+            return self._assets
+        names: set[str] = set()
+        for name in self._archive_files:
+            if Path(name).suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"):
+                if not self._is_excluded(name):
+                    names.add(name)
+        try:
+            disk_files = sorted(self.game_dir.rglob("*"))
+        except OSError:  # pragma: no cover - permission problems
+            disk_files = []
+        for path in disk_files:
+            if not path.is_file():
+                continue
+            if path.suffix.lower() not in (".png", ".jpg", ".jpeg", ".webp"):
+                continue
+            relative = path.relative_to(self.game_dir).as_posix()
+            if not self._is_excluded(relative):
+                names.add(relative)
+        self._assets = tuple(sorted(names))
+        return self._assets
+
+    def find_assets(self, keywords: Iterable[str], limit: int = 24) -> tuple[str, ...]:
+        """Select assets whose path contains one of the case-insensitive hints."""
+
+        hints = tuple(str(keyword).lower() for keyword in keywords if str(keyword))
+        if not hints:
+            return ()
+        found: list[str] = []
+        for name in self.asset_names():
+            lowered = name.lower()
+            if any(hint in lowered for hint in hints):
+                found.append(name)
+                if len(found) >= limit:
+                    break
+        return tuple(found)
 
     def parse_unit(self, unit: ScriptUnit) -> ScriptFile:
         cached = self._cache.get(unit.name)

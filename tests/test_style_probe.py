@@ -172,3 +172,61 @@ class RealGame2ProbeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RegionSamplingProbeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        self.game = self.root / "game"
+        self.game.mkdir()
+        (self.game / "gui.rpy").write_text(
+            'init python:\n    gui.init(1280, 720)\n'
+            'define gui.accent_color = "#dd6699"\n',
+            encoding="utf-8",
+        )
+        (self.game / "ui").mkdir()
+
+    def _gradient_png(self) -> bytes:
+        width, height = 200, 50
+        rows = []
+        for y in range(height):
+            value = 255 if y < height // 4 else 0
+            rows.extend([value, value, value, 255] * width)
+        return make_png(width, height, [tuple(rows[i : i + 4]) for i in range(0, len(rows), 4)])
+
+    def test_panel_uses_centre_not_whole_image_average(self) -> None:
+        (self.game / "ui" / "option_gradient.png").write_bytes(self._gradient_png())
+        (self.game / "styles.rpy").write_text(
+            'style choice_button:\n    background Frame("ui/option_gradient.png", 4, 4)\n',
+            encoding="utf-8",
+        )
+        with GameArchive.open(self.game, use_archives=False) as archive:
+            result = probe_style(list(archive.parse_all().values()), archive)
+        panel = next(sample for sample in result.evidence.ui_samples if sample.name == "panel")
+        self.assertTrue(panel.gradient)
+        self.assertEqual(panel.center, "#000000")
+        self.assertNotEqual(panel.average, panel.center)
+        tokens = tokens_from_evidence(result.evidence)
+        self.assertEqual(tokens.panel, "#000000")
+        self.assertTrue(any("gradient" in note for note in tokens.notes))
+
+    def test_archive_panel_scan(self) -> None:
+        from .test_rpa import write_rpa
+
+        write_rpa(
+            self.game / "images.rpa",
+            {"gui/button/choice_idle_background.png": self._gradient_png()},
+        )
+        with GameArchive.open(self.game) as archive:
+            result = probe_style(list(archive.parse_all().values()), archive)
+        panel = next(
+            (sample for sample in result.evidence.ui_samples if sample.name == "panel"),
+            None,
+        )
+        self.assertIsNotNone(panel)
+        assert panel is not None
+        self.assertEqual(panel.path, "gui/button/choice_idle_background.png")
+        self.assertEqual(panel.center, "#000000")
+        self.assertTrue(panel.gradient)

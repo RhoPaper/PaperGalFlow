@@ -6,6 +6,32 @@ gets its own version so the history stays traceable.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-01
+
+### Added
+
+- **Region-aware UI sampling.**  `analyze_png()` reports the centre colour,
+  edge colour, top/bottom gradient bands, opacity/coverage, rounded-corner
+  alpha and estimated nine-patch insets instead of only a whole-image average.
+  Translucent and gradient panels are now recognised from the asset itself.
+- **Archive panel discovery.**  When no panel asset is referenced by readable
+  GUI/screen source, `GameArchive.find_assets()` scans disk and `.rpa`
+  archives (including `images.rpa`) for choice/dialog/frame/panel art, so
+  compiled-only games still contribute colours, border colour and nine-patch
+  geometry.
+- `pgf-style` applies the sampled centre colour, border colour, corner radius
+  and border width to the tokens, and records gradient/translucency/insets in
+  the style notes and JSON evidence.
+
+### Changed
+
+- Panel sampling uses the centre region (and reports the gradient endpoints)
+  rather than the average of the whole image, which previously biased colours
+  towards borders, shadows and transparent padding.
+- `UiSample` carries `center`, `edge`, `insets`, `border_width`,
+  `corner_radius`, `gradient*`, `coverage` and `opacity`; `pgf inspect --json`
+  exposes them.
+
 ## [0.4.0] - 2026-11-01
 
 ### Added

@@ -55,6 +55,17 @@ def _color_from_samples(evidence: StyleEvidence, *names: str) -> str:
     return normalize_color(sample.color) or normalize_color(sample.average)
 
 
+def _center_from_samples(evidence: StyleEvidence, *names: str) -> str:
+    sample = _sample(evidence, *names)
+    if sample is None:
+        return ""
+    return (
+        normalize_color(sample.center)
+        or normalize_color(sample.color)
+        or normalize_color(sample.average)
+    )
+
+
 def resolve_ui_samples(samples: Iterable[UiSample]) -> dict[str, str]:
     """Return the best colour per semantic name from raw samples."""
 
@@ -81,8 +92,9 @@ def tokens_from_evidence(
     accent = normalize_color(evidence.colors.get("accent", "")) or _color_from_samples(
         evidence, "accent", "quick_icon", "quick_button"
     )
-    panel = normalize_color(evidence.colors.get("panel", "")) or _color_from_samples(
-        evidence, "panel", "option_bg", "dialog_bg"
+    panel_sample = _sample(evidence, "panel", "option_bg", "dialog_bg", "menu_bg")
+    panel = normalize_color(evidence.colors.get("panel", "")) or _center_from_samples(
+        evidence, "panel", "option_bg", "dialog_bg", "menu_bg"
     )
 
     chosen_preset = preset
@@ -98,6 +110,7 @@ def tokens_from_evidence(
     tokens = preset_tokens(chosen_preset)
     tokens.name = "evidence_" + chosen_preset
     applied: list[str] = []
+    surface_notes: list[str] = []
 
     if panel:
         tokens.panel = panel
@@ -112,6 +125,33 @@ def tokens_from_evidence(
             tokens.shadow = with_alpha("#000000", 0.35)
         tokens.border = mix(panel, tokens.text_dim, 0.55)
         applied.append("panel")
+
+    if panel_sample is not None:
+        edge = normalize_color(panel_sample.edge)
+        if edge and contrast_ratio(edge, tokens.panel) >= 1.15:
+            tokens.border = edge
+            applied.append("panel_border")
+        if panel_sample.corner_radius:
+            tokens.corner_radius = max(6, min(24, int(panel_sample.corner_radius)))
+            applied.append("corner_radius")
+        if panel_sample.border_width:
+            tokens.border_width = max(1, min(4, int(panel_sample.border_width)))
+        if panel_sample.insets:
+            surface_notes.append(
+                "nine-patch insets "
+                + ",".join(str(value) for value in panel_sample.insets)
+            )
+        if panel_sample.gradient:
+            surface_notes.append(
+                "gradient panel "
+                f"{panel_sample.gradient_top} -> {panel_sample.gradient_bottom}; "
+                f"sampled centre {tokens.panel}"
+            )
+        if panel_sample.coverage < 0.98 or panel_sample.opacity < 0.98:
+            surface_notes.append(
+                f"translucent panel (coverage {panel_sample.coverage:.2f}, "
+                f"average alpha {panel_sample.opacity:.2f})"
+            )
 
     text = normalize_color(evidence.colors.get("text", ""))
     if text and contrast_ratio(text, tokens.panel) >= 3.0:
@@ -202,6 +242,7 @@ def tokens_from_evidence(
     tokens.notes = list(evidence.sources)
     if applied:
         tokens.notes.append("applied: " + ", ".join(applied))
+    tokens.notes.extend(surface_notes)
     for warning in evidence.warnings:
         tokens.notes.append("warning: " + warning)
     return tokens

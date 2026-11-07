@@ -134,6 +134,37 @@ class EvidenceTests(unittest.TestCase):
         self.assertGreater(luminance(tokens.panel), 0.7)
         self.assertLess(luminance(tokens.palette("read").text), 0.5)
 
+    def test_panel_centre_gradient_and_nine_patch(self) -> None:
+        evidence = StyleEvidence(
+            ui_samples=[
+                UiSample(
+                    "panel",
+                    "ui/panel.png",
+                    color="#404040",
+                    average="#404040",
+                    center="#101010",
+                    edge="#805040",
+                    insets=(18, 18, 18, 18),
+                    border_width=2,
+                    corner_radius=16,
+                    gradient=True,
+                    gradient_top="#ffffff",
+                    gradient_bottom="#000000",
+                    coverage=0.75,
+                    opacity=0.75,
+                )
+            ]
+        )
+        tokens = tokens_from_evidence(evidence)
+        self.assertEqual(tokens.panel, "#101010")
+        self.assertEqual(tokens.border, "#805040")
+        self.assertEqual(tokens.corner_radius, 16)
+        self.assertEqual(tokens.border_width, 2)
+        text = "\n".join(tokens.notes)
+        self.assertIn("nine-patch insets", text)
+        self.assertIn("gradient panel", text)
+        self.assertIn("translucent panel", text)
+
     def test_theme_serialisable(self) -> None:
         theme = build_theme(preset_tokens())
         json.dumps(theme.constants)

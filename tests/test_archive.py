@@ -92,6 +92,29 @@ class SyntheticGameTests(unittest.TestCase):
             source, _script = found
             self.assertIn('text "hi"', source)
 
+    def test_asset_names_and_find_assets(self) -> None:
+        (self.game / "ui").mkdir()
+        (self.game / "ui" / "dialog_bg.png").write_bytes(b"disk")
+        write_rpa(
+            self.game / "images.rpa",
+            {
+                "gui/button/choice_idle_background.png": b"arch",
+                "tl/japanese/panel.png": b"translation",
+                "pgf_ui/node_read.png": b"generated",
+            },
+        )
+        with GameArchive.open(self.game) as archive:
+            names = archive.asset_names()
+            self.assertIn("ui/dialog_bg.png", names)
+            self.assertIn("gui/button/choice_idle_background.png", names)
+            self.assertNotIn("tl/japanese/panel.png", names)
+            self.assertNotIn("pgf_ui/node_read.png", names)
+            self.assertEqual(
+                archive.find_assets(("choice",), limit=4),
+                ("gui/button/choice_idle_background.png",),
+            )
+            self.assertEqual(archive.find_assets(("nothing-here",)), ())
+
     def test_missing_directory(self) -> None:
         with self.assertRaises(ArchiveError):
             GameArchive(self.root / "nope")

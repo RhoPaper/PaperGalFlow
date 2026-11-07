@@ -16,7 +16,7 @@ from typing import Iterable
 from pgf_style import StyleEvidence, UiSample, luminance as _luminance, lighten as _lighten, normalize_color
 
 from .archive import ArchiveError, GameArchive
-from .png import PngError, color_stats, png_size
+from .png import PngError, analyze_png
 from .script_model import ScreenInfo, ScriptFile
 
 __all__ = [
@@ -482,6 +482,22 @@ def probe_style(
                         continue
                     add_candidate(path, semantic, f"screen {info.name}")
 
+    # Games that ship only compiled screens often reference their panel art by
+    # convention rather than from a readable screen tree.  Scan the archive(s)
+    # for likely panel assets so `images.rpa` can still contribute colours and
+    # nine-patch geometry.
+    has_panel = any(
+        semantic in ("option_bg", "option_bg_hover", "dialog_bg", "menu_bg")
+        for semantic, _origin in candidates.values()
+    )
+    if archive is not None and not has_panel:
+        for path in archive.find_assets(_PANEL_HINTS, limit=16):
+            semantic = _classify_asset(path)
+            if semantic in ("option_bg", "option_bg_hover", "dialog_bg", "menu_bg"):
+                add_candidate(path, semantic, "archive panel scan")
+        if candidates:
+            result.notes.append("scanned archives for panel assets")
+
     ordered = sorted(
         candidates.items(),
         key=lambda item: (
@@ -497,31 +513,43 @@ def probe_style(
             break
         try:
             data = archive.read(path)
-            size = png_size(data)
-            stats = color_stats(data)
+            analysis = analyze_png(data)
         except (ArchiveError, PngError, KeyError) as exc:
             result.warnings.append(f"could not sample {path}: {exc}")
             continue
-        if stats.coverage < 0.02:
+        if analysis.coverage < 0.02:
             result.warnings.append(f"skipped mostly transparent asset {path}")
             continue
         sample = UiSample(
             name=semantic,
             path=path,
-            color=stats.dominant,
-            average=stats.average,
-            alpha=round(stats.coverage, 3),
-            width=size[0],
-            height=size[1],
+            color=analysis.dominant,
+            average=analysis.average,
+            alpha=round(analysis.coverage, 3),
+            width=analysis.width,
+            height=analysis.height,
+            center=analysis.center,
+            edge=analysis.edge,
+            insets=analysis.insets,
+            border_width=analysis.border_width,
+            corner_radius=analysis.corner_radius,
+            gradient=analysis.gradient,
+            gradient_top=analysis.gradient_top,
+            gradient_bottom=analysis.gradient_bottom,
+            coverage=analysis.coverage,
+            opacity=analysis.opacity,
         )
         samples.append(sample)
         samples_by_name.setdefault(semantic, sample)
-        evidence.sources.append(f"sampled {path}: {stats.dominant}")
+        evidence.sources.append(
+            f"sampled {path}: centre {analysis.center}, dominant {analysis.dominant}"
+            + (" (gradient)" if analysis.gradient else "")
+        )
         if quick_menu is not None and semantic in ("quick_icon", "quick_icon_hover"):
             for button in quick_menu.buttons:
                 if button.asset == path and not button.width:
-                    button.width = size[0]
-                    button.height = size[1]
+                    button.width = analysis.width
+                    button.height = analysis.height
 
     # The quick menu icons are usually the clearest expression of the game's
     # accent colour, so they win over the default GUI template when saturated.
@@ -539,7 +567,11 @@ def probe_style(
 
     panel = samples_by_name.get("option_bg") or samples_by_name.get("dialog_bg") or samples_by_name.get("menu_bg")
     if panel is not None:
-        panel_color = normalize_color(panel.average) or normalize_color(panel.color)
+        panel_color = (
+            normalize_color(panel.center)
+            or normalize_color(panel.average)
+            or normalize_color(panel.color)
+        )
         if panel_color:
             evidence.colors["panel"] = panel_color
             samples.append(
@@ -547,13 +579,41 @@ def probe_style(
                     name="panel",
                     path=panel.path,
                     color=panel_color,
-                    average=panel_color,
+                    average=panel.average or panel_color,
                     alpha=panel.alpha,
                     width=panel.width,
                     height=panel.height,
+                    center=panel_color,
+                    edge=panel.edge,
+                    insets=panel.insets,
+                    border_width=panel.border_width,
+                    corner_radius=panel.corner_radius,
+                    gradient=panel.gradient,
+                    gradient_top=panel.gradient_top,
+                    gradient_bottom=panel.gradient_bottom,
+                    coverage=panel.coverage,
+                    opacity=panel.opacity,
                 )
             )
-            evidence.sources.append(f"panel from {panel.path}: {panel_color}")
+            evidence.sources.append(
+                f"panel from {panel.path}: centre {panel_color}"
+                + (" (gradient)" if panel.gradient else "")
+            )
+            if panel.insets and max(panel.insets):
+                result.notes.append(
+                    "panel nine-patch insets "
+                    + ",".join(str(value) for value in panel.insets)
+                )
+            if panel.gradient:
+                result.notes.append(
+                    f"panel gradient {panel.gradient_top} -> {panel.gradient_bottom}; "
+                    "using the centre region"
+                )
+            if panel.coverage < 0.98 or panel.opacity < 0.98:
+                result.notes.append(
+                    f"panel is translucent (coverage {panel.coverage:.2f}, "
+                    f"average alpha {panel.opacity:.2f})"
+                )
 
     evidence.ui_samples = samples
     evidence.background_image = _resolve_str(defines.get("game_menu_background", ""), defines)
