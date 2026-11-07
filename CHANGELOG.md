@@ -6,6 +6,45 @@ gets its own version so the history stays traceable.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-01
+
+### Added
+
+- **Nine-patch rounded UI assets.**  `pgf-adapter-renpy` now renders its own
+  anti-aliased PNG assets with a pure-Python encoder: six node palettes (plus
+  hover), legend swatches, a soft drop shadow, top/bottom panel bars, edge
+  labels and chrome buttons.  The generated screen uses Ren'Py `Frame` with
+  per-asset slice sizes, so every node and panel has genuine rounded corners
+  instead of four `Solid` border strips.  Assets live in `game/pgf_ui/` and
+  carry a `Software=PaperGalFlow` PNG text marker.
+- **Soft shadows.**  Nodes and the title bar get blurred alpha shadows instead
+  of hard offset rectangles.
+- `pgf-style`: `corner_radius` / `border_width` geometry tokens, serialised in
+  the theme dictionary and honoured by the asset generator.
+- Binary generated artifacts: the installer, uninstaller, verifier, manifest
+  and `pgf build` now handle PNG payloads and nested `pgf_ui/` paths with the
+  same ownership, hash and atomic-write rules as `.rpy` files.
+
+### Changed
+
+- The generated `pgf_flowchart_screen.rpy` embeds `PGF_UI` and references
+  `Frame(...)` displayables for node/panel/button backgrounds; the quick-menu
+  entry button uses the same rounded accent asset.
+- `pgf build` prints paths relative to the output directory.
+
+## [0.3.0] - 2026-11-01
+
+### Changed
+
+- **Node jumps reuse the game's HISTORY rollback.**  Clicking a node with a
+  checkpoint in the current save's `_history_list` shows the same `Confirm`
+  dialog as the HISTORY jump-back buttons and calls
+  `RollbackToIdentifier(identifier)`.  History becomes "the target and
+  everything before it", and Ren'Py restores variables and branch state.
+- Nodes without a usable checkpoint are labelled `无历史` and are not
+  clickable; no synthetic history, replay menus or game-state writes are
+  generated.
+
 ## [0.2.0] - 2026-11-01
 
 ### Changed

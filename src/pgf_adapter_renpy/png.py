@@ -1,11 +1,13 @@
-"""A tiny PNG decoder used to sample colours from a game's own UI assets.
+"""A tiny PNG codec used to sample and generate UI assets.
 
 Ren'Py ships UI backgrounds, button images and icons as PNG files inside
 ``.rpa`` archives.  Sampling their dominant colours gives a much more faithful
 palette than the default GUI template, without needing Pillow (which would
-break the "pure standard library, Windows friendly" promise).
+break the "pure standard library, Windows friendly" promise).  The encoder at
+the bottom of this module lets PaperGalFlow draw its own anti-aliased nine
+patch assets for Ren'Py ``Frame`` displayables.
 
-Only the common subset is implemented: 8/16 bit non-interlaced images with
+The decoder only handles the common subset: 8/16 bit non-interlaced images with
 greyscale, RGB, palette, grey+alpha or RGBA pixels.  Anything outside that
 raises :class:`PngError` and the caller simply skips the asset.
 """
@@ -18,10 +20,20 @@ from dataclasses import dataclass
 
 from pgf_core.errors import PgfError
 
-__all__ = ["PngError", "PngImage", "PngColorStats", "decode_png", "color_stats", "png_size"]
+__all__ = [
+    "PngError",
+    "PngImage",
+    "PngColorStats",
+    "decode_png",
+    "encode_png",
+    "color_stats",
+    "png_size",
+]
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 _MAX_PIXELS = 40_000_000
+_MARKER_KEY = b"Software"
+_MARKER_VALUE = b"PaperGalFlow"
 
 
 class PngError(PgfError):
@@ -301,3 +313,72 @@ def color_stats(data: bytes) -> PngColorStats:
         dominant = average
     coverage = opaque / sampled if sampled else 0.0
     return PngColorStats(average, dominant, coverage, original_width, original_height)
+
+
+# ---------------------------------------------------------------------------
+# encoder (used for generated nine patch assets)
+# ---------------------------------------------------------------------------
+
+
+def _chunk(kind: bytes, payload: bytes) -> bytes:
+    return (
+        struct.pack(">I", len(payload))
+        + kind
+        + payload
+        + struct.pack(">I", zlib.crc32(kind + payload) & 0xFFFFFFFF)
+    )
+
+
+def encode_png(
+    width: int,
+    height: int,
+    pixels: bytes,
+    *,
+    metadata: dict[str, str] | None = None,
+) -> bytes:
+    """Encode straight RGBA pixels as an 8 bit, non-interlaced PNG.
+
+    ``metadata`` becomes ``tEXt`` chunks.  PaperGalFlow always writes a
+    ``Software=PaperGalFlow`` marker so the installer can prove it owns a
+    generated asset before overwriting or deleting it.
+    """
+
+    width = int(width)
+    height = int(height)
+    if width <= 0 or height <= 0:
+        raise PngError("PNG dimensions must be positive")
+    if width * height > _MAX_PIXELS:
+        raise PngError("PNG dimensions are out of range")
+    expected = width * height * 4
+    if len(pixels) != expected:
+        raise PngError(f"expected {expected} RGBA bytes, got {len(pixels)}")
+
+    rows = bytearray(height * (width * 4 + 1))
+    source = 0
+    target = 0
+    for _y in range(height):
+        rows[target] = 0  # filter: none
+        target += 1
+        rows[target : target + width * 4] = pixels[source : source + width * 4]
+        source += width * 4
+        target += width * 4
+
+    chunks = bytearray(PNG_SIGNATURE)
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    chunks += _chunk(b"IHDR", ihdr)
+    entries = {"Software": "PaperGalFlow"}
+    if metadata:
+        entries.update({str(key): str(value) for key, value in metadata.items()})
+    for key, value in entries.items():
+        key_bytes = key.encode("latin-1", "replace")
+        value_bytes = value.encode("latin-1", "replace")
+        chunks += _chunk(b"tEXt", key_bytes + b"\x00" + value_bytes)
+    chunks += _chunk(b"IDAT", zlib.compress(bytes(rows), 9))
+    chunks += _chunk(b"IEND", b"")
+    return bytes(chunks)
+
+
+def is_generated_asset(data: bytes) -> bool:
+    """True when *data* is a PaperGalFlow generated PNG (marker in header)."""
+
+    return data.startswith(PNG_SIGNATURE) and _MARKER_KEY + b"\x00" + _MARKER_VALUE in data[:2048]

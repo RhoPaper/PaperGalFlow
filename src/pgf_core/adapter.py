@@ -109,12 +109,21 @@ class EntryResult:
 @dataclass
 class GeneratedArtifact:
     name: str
-    content: str
+    content: str = ""
     role: str = "file"
+    data: bytes | None = None
+
+    @property
+    def is_binary(self) -> bool:
+        return self.data is not None
+
+    @property
+    def payload(self) -> bytes:
+        return self.data if self.data is not None else self.content.encode("utf-8")
 
     @property
     def byte_size(self) -> int:
-        return len(self.content.encode("utf-8"))
+        return len(self.payload)
 
 
 @dataclass

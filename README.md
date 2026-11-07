@@ -8,12 +8,12 @@
 
 PaperGalFlow 解析游戏脚本，还原 label / 选项 / 条件分支 / 结局之间的剧情图，按游戏自身的 UI 颜色与字体做布局，然后把流程图**固化**成若干个 `pgf_*.rpy` 文件写进游戏目录。游戏运行时不再解析脚本，也不依赖外部进程；删除生成文件即回滚。
 
-> 当前版本：**v0.3.0**（首个可用版本为 v0.1.0）。首期只支持 Ren'Py 8.x；已在 Linux + Ren'Py 8.6 上用《永恒与星辰与日常》和《小小的身影，重叠的内心》验证。
+> 当前版本：**v0.4.0**（首个可用版本为 v0.1.0）。首期只支持 Ren'Py 8.x；已在 Linux + Ren'Py 8.6 上用《永恒与星辰与日常》和《小小的身影，重叠的内心》验证。
 
 ## 功能
 
 - **剧情图**：自动解析 `.rpy` 源码或 `.rpyc` 编译脚本（含 `.rpa` 归档），识别场景、选项、条件分歧、跳转、call 支线与结局。
-- **流程图 UI**：独立的 `screen pgf_flowchart`，通过 `ShowMenu("pgf_flowchart")` 打开；包含标题栏、进度、图例、缩放、拖拽/滚轮浏览和节点点击跳转。
+- **流程图 UI**：独立的 `screen pgf_flowchart`，通过 `ShowMenu("pgf_flowchart")` 打开；包含标题栏、进度、图例、缩放、拖拽/滚轮浏览和节点点击跳转。节点与面板使用工具自己生成的九宫格圆角 PNG（`Frame` 拉伸，柔和阴影），不依赖游戏可能缺失的 `gui/button/*.png`。
 - **节点状态**：锁定 / 未读 / 已读 / 结局（未达成、已达成）。状态直接读取 Ren'Py 自身的 `seen_label` 数据库，不写 `persistent`、不挂 label 回调；锁定节点不泄露标题。
 - **历史回滚跳转**：可点击节点会先确认，然后复用游戏 HISTORY 界面同款的 `RollbackToIdentifier`，回滚到该节点在**当前存档历史记录**中的检查点。历史列表自动变为“目标及其之前的内容”，变量/分支状态也由游戏精确恢复；只使用 `_history_list` 里已有的检查点，不合成菜单、不改写历史、不写游戏状态。历史中不存在的节点标为“无历史”，不可点击。
 - **风格提取**：读取游戏的 `gui.rpy` / `screens.rpy`（或 `.rpyc`）中的颜色、字体、字号、按钮状态，并直接采样游戏自己的 UI PNG（`dialog_bg`、选项按钮、快捷菜单按钮），还原主题；证据不足时回退到内置主题。
@@ -90,6 +90,7 @@ pgf preview "/home/rhopaper/.local/share/Steam/steamapps/common/小小的身影�
 | --- | --- |
 | `pgf_flowchart_screen.rpy` | 流程图 screen、内嵌的运行时状态机、预计算的节点/连线/样式数据、label 回调 |
 | `pgf_menu_hook.rpy` | 入口：quick_menu 源码改写或悬浮按钮 + F10 热键 |
+| `pgf_ui/*.png` | 25 个九宫格 UI 资产：节点/悬停、图例、阴影、面板、按钮、入口按钮 |
 | `pgf_manifest.json` | 安装清单（版本、入口模式、文件哈希），供 `status` / `uninstall` 使用 |
 
 Ren'Py 首次运行后会额外生成同名的 `.rpyc`。**手动回滚时请同时删除 `.rpy` 和 `.rpyc`**，否则 Ren'Py 仍会加载残留的编译文件；使用 `pgf uninstall` 则会自动处理。
@@ -176,6 +177,7 @@ cd "/path/to/game"
 - `0.1.1` 选择节点回放（已在 `0.2.0` 移除）；重装排除自身生成文件；清理旧 `.rpyc`
 - `0.2.0` 仅跳转到已有场景 label；移除 replay menu；状态改读 Ren'Py `seen_label`，不再写 `persistent` / 挂回调
 - `0.3.0` 复用 HISTORY 的 `RollbackToIdentifier`：只跳历史中已有的场景/选项检查点，历史与变量状态和游戏自身回滚完全一致
+- `0.4.0` 九宫格圆角资产：纯 Python 生成 PNG，`Frame` 渲染节点/面板，柔和阴影；安装器支持二进制资产
 
 ## 许可证
 

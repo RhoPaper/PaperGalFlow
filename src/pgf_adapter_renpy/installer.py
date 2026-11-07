@@ -14,12 +14,13 @@ import re
 import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Iterable
 
 from pgf_core.errors import PgfError
 from pgf_core.version import __version__
 
+from .png import is_generated_asset
 from .screen_emit import GeneratedFile
 from .rpy_text import parse_script
 
@@ -36,8 +37,10 @@ __all__ = [
 ]
 
 MANIFEST_NAME = "pgf_manifest.json"
-_NAME_RE = re.compile(r"^pgf_[A-Za-z0-9_.-]+\.rpy$")
-_MARKER = "PaperGalFlow"
+_RPY_RE = re.compile(r"^pgf_[A-Za-z0-9_.-]+\.rpy$")
+_ASSET_RE = re.compile(r"^pgf_[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.png$")
+_NAME_RE = _RPY_RE  # backwards compatible name for source files
+_MARKER = b"PaperGalFlow"
 
 
 class InstallError(PgfError):
@@ -84,20 +87,38 @@ def resolve_game_dir(path: Path) -> Path:
     raise InstallError(f"not a directory: {path}")
 
 
-def _hash(content: str) -> str:
-    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+def _is_rpy(name: str) -> bool:
+    return bool(_RPY_RE.match(name))
 
 
-def _has_marker(content: str) -> bool:
-    return _MARKER in "\n".join(content.splitlines()[:8])
+def _is_managed_name(name: str) -> bool:
+    return bool(_RPY_RE.match(name) or _ASSET_RE.match(name))
 
 
-def _atomic_write(path: Path, content: str) -> None:
+def _target_path(game_dir: Path, name: str) -> Path:
+    relative = PurePosixPath(name)
+    return game_dir.joinpath(*relative.parts)
+
+
+def _hash(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _has_marker(data: bytes) -> bool:
+    """Ownership marker: a header comment for .rpy, a tEXt chunk for .png."""
+
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return is_generated_asset(data)
+    head = b"\n".join(data.splitlines()[:8])
+    return _MARKER in head
+
+
+def _atomic_write(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent))
     try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
-            handle.write(content)
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())
         try:
@@ -113,13 +134,36 @@ def _atomic_write(path: Path, content: str) -> None:
         raise
 
 
+def _cleanup_empty_dirs(game_dir: Path, names: Iterable[str]) -> None:
+    for name in names:
+        parent = _target_path(game_dir, name).parent
+        if parent == game_dir or not parent.is_dir():
+            continue
+        try:
+            if not any(parent.iterdir()):
+                parent.rmdir()
+        except OSError:  # pragma: no cover - best effort
+            pass
+
+
 def static_check(files: Iterable[GeneratedFile]) -> list[str]:
-    """Cheap, dependency free sanity checks of generated sources."""
+    """Cheap, dependency free sanity checks of generated sources and assets."""
 
     problems: list[str] = []
+    seen: set[str] = set()
     for generated in files:
-        if not _NAME_RE.match(generated.name):
+        if generated.name in seen:
+            problems.append(f"duplicate generated file name: {generated.name}")
+        seen.add(generated.name)
+        if not _is_managed_name(generated.name):
             problems.append(f"refusing unexpected generated file name: {generated.name}")
+            continue
+        if not _is_rpy(generated.name):
+            if not generated.data:
+                problems.append(f"{generated.name}: empty asset")
+            elif not is_generated_asset(generated.data):
+                problems.append(f"{generated.name}: asset is not a PaperGalFlow PNG")
+            continue
         if not generated.content.endswith("\n"):
             problems.append(f"{generated.name}: file does not end with a newline")
         try:
@@ -180,44 +224,49 @@ def install_files(
     new_names = {item.name for item in generated}
 
     for item in generated:
-        target = game_dir / item.name
+        target = _target_path(game_dir, item.name)
         if target.exists():
-            existing = target.read_text(encoding="utf-8", errors="replace")
+            try:
+                existing = target.read_bytes()
+            except OSError as exc:
+                report.errors.append(f"could not read {item.name}: {exc}")
+                continue
             if not _has_marker(existing) and not force:
                 report.errors.append(
                     f"{item.name} exists and was not created by PaperGalFlow; "
                     "pass --force to overwrite it"
                 )
                 continue
+        if _is_rpy(item.name):
+            companion = target.with_suffix(".rpyc")
+            if companion.is_file():
+                if dry_run:
+                    report.removed.append(companion.name)
+                else:
+                    try:
+                        companion.unlink()
+                        report.removed.append(companion.name)
+                    except OSError as exc:
+                        report.warnings.append(f"could not remove stale {companion.name}: {exc}")
         if dry_run:
             report.written.append(item.name)
             continue
-        companion = game_dir / (item.name[:-4] + ".rpyc")
-        if companion.is_file():
-            if dry_run:
-                report.removed.append(companion.name)
-            else:
-                try:
-                    companion.unlink()
-                    report.removed.append(companion.name)
-                except OSError as exc:
-                    report.warnings.append(f"could not remove stale {companion.name}: {exc}")
         try:
-            _atomic_write(target, item.content)
+            _atomic_write(target, item.payload)
             report.written.append(item.name)
         except OSError as exc:
             report.errors.append(f"could not write {item.name}: {exc}")
 
     # Remove files from a previous install that are no longer generated.
     for stale in sorted(old_names - new_names):
-        if not _NAME_RE.match(stale):
+        if not _is_managed_name(stale):
             continue
-        target = game_dir / stale
+        target = _target_path(game_dir, stale)
         if not target.exists():
             continue
         try:
-            content = target.read_text(encoding="utf-8", errors="replace")
-            if not _has_marker(content) and not force:
+            existing = target.read_bytes()
+            if not _has_marker(existing) and not force:
                 report.warnings.append(f"left stale file {stale} in place (missing marker)")
                 continue
             if dry_run:
@@ -225,6 +274,12 @@ def install_files(
                 continue
             target.unlink()
             report.removed.append(stale)
+            if _is_rpy(stale):
+                companion = target.with_suffix(".rpyc")
+                if companion.is_file():
+                    companion.unlink()
+                    report.removed.append(companion.name)
+            _cleanup_empty_dirs(game_dir, (stale,))
         except OSError as exc:
             report.errors.append(f"could not remove stale file {stale}: {exc}")
 
@@ -237,7 +292,7 @@ def install_files(
                 {
                     "name": item.name,
                     "role": item.role,
-                    "sha256": _hash(item.content),
+                    "sha256": _hash(item.payload),
                     "bytes": item.byte_size,
                 }
                 for item in generated
@@ -246,7 +301,10 @@ def install_files(
         }
         manifest_path = game_dir / MANIFEST_NAME
         try:
-            _atomic_write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+            _atomic_write(
+                manifest_path,
+                (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode("utf-8"),
+            )
             report.manifest_path = manifest_path
         except OSError as exc:
             report.errors.append(f"could not write manifest: {exc}")
@@ -275,25 +333,28 @@ def uninstall_files(
     # Find orphans that still carry our marker.
     for path in sorted(game_dir.glob("pgf_*.rpy")):
         names.add(path.name)
+    for path in sorted(game_dir.glob("pgf_*/*.png")):
+        names.add(path.relative_to(game_dir).as_posix())
 
+    removed_names: list[str] = []
     for name in sorted(names):
-        if not _NAME_RE.match(name):
+        if not _is_managed_name(name):
             continue
-        companion = game_dir / (name[:-4] + ".rpyc")
-        target = game_dir / name
+        target = _target_path(game_dir, name)
+        companion = target.with_suffix(".rpyc") if _is_rpy(name) else None
         if not target.exists():
             report.skipped.append(name)
             continue
         try:
-            content = target.read_text(encoding="utf-8", errors="replace")
+            existing = target.read_bytes()
         except OSError as exc:
             report.errors.append(f"could not read {name}: {exc}")
             continue
-        if not _has_marker(content) and not force:
+        if not _has_marker(existing) and not force:
             report.warnings.append(f"kept {name}: missing PaperGalFlow marker")
             continue
         digest = expected.get(name)
-        if digest and _hash(content) != digest and not force:
+        if digest and _hash(existing) != digest and not force:
             report.warnings.append(f"kept {name}: modified since install (use --force)")
             continue
         if dry_run:
@@ -302,9 +363,10 @@ def uninstall_files(
         try:
             target.unlink()
             report.removed.append(name)
-                # Remove the compiled companion too, otherwise Ren'Py would keep
-                # loading the old screen after the source is gone.
-            if companion.is_file():
+            removed_names.append(name)
+            # Remove the compiled companion too, otherwise Ren'Py would keep
+            # loading the old screen after the source is gone.
+            if companion is not None and companion.is_file():
                 try:
                     prefix = companion.read_bytes()[:10]
                 except OSError:
@@ -314,6 +376,9 @@ def uninstall_files(
                     report.removed.append(companion.name)
         except OSError as exc:
             report.errors.append(f"could not remove {name}: {exc}")
+
+    if not dry_run:
+        _cleanup_empty_dirs(game_dir, removed_names)
 
     manifest_path = game_dir / MANIFEST_NAME
     kept = [warning for warning in report.warnings if warning.startswith("kept ")]
@@ -349,14 +414,18 @@ def verify_install(game_dir: Path) -> list[str]:
         name = str(entry.get("name", ""))
         if not name:
             continue
-        path = game_dir / name
+        path = _target_path(game_dir, name)
         if not path.is_file():
             problems.append(f"missing file: {name}")
             continue
-        content = path.read_text(encoding="utf-8", errors="replace")
-        if not _has_marker(content):
+        try:
+            existing = path.read_bytes()
+        except OSError as exc:
+            problems.append(f"could not read {name}: {exc}")
+            continue
+        if not _has_marker(existing):
             problems.append(f"{name} lost its PaperGalFlow marker")
         digest = str(entry.get("sha256", ""))
-        if digest and _hash(content) != digest:
+        if digest and _hash(existing) != digest:
             problems.append(f"{name} was modified after installation")
     return problems

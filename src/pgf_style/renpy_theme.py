@@ -52,6 +52,8 @@ def build_theme(tokens: StyleTokens) -> RenpyTheme:
         "node_padding": tokens.node_padding,
         "panel_padding": tokens.panel_padding,
         "margin": tokens.margin,
+        "corner_radius": tokens.corner_radius,
+        "border_width": tokens.border_width,
         "background_image": tokens.background_image,
         "colors": {
             "background": tokens.background,

@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pgf_core.version import __version__
 from pgf_style import StyleTokens, contrast_text, darken, lighten
 
+from .assets import UI_DIR
 from .screen_emit import GeneratedFile
 from .style_probe import QuickMenuProbe
 
@@ -158,8 +159,8 @@ def _overlay_screen(
         f"        xpos {x}\n"
         f"        ypos {y}\n"
         f"        xysize ({width}, {height})\n"
-        f"        background Solid(\"{fill}\")\n"
-        f"        hover_background Solid(\"{hover}\")\n"
+        f'        background Frame("{UI_DIR}/accent_button.png", 20, 20)\n'
+        f'        hover_background Frame("{UI_DIR}/accent_button_hover.png", 20, 20)\n'
         "        action ShowMenu(\"pgf_flowchart\")\n"
         f"        text \"{options.button_label}\":\n"
         f"{font}"
@@ -290,8 +291,8 @@ def _build_patch(
             f"        xpos {x}",
             f"        ypos {y}",
             f"        xysize ({width}, {height})",
-            f'        background Solid("{fill}")',
-            f'        hover_background Solid("{hover}")',
+            f'        background Frame("{UI_DIR}/accent_button.png", 20, 20)',
+            f'        hover_background Frame("{UI_DIR}/accent_button_hover.png", 20, 20)',
             '        action ShowMenu("pgf_flowchart")',
             '        text "流程图":',
             font,

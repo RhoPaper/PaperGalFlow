@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from pgf_adapter_renpy.entry import EntryOptions, build_entry_plan
+from pgf_adapter_renpy.png import encode_png, is_generated_asset
 from pgf_adapter_renpy.installer import (
     InstallError,
     install_files,
@@ -168,6 +169,49 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue(report.ok)
         self.assertFalse((self.game / "pgf_flowchart_screen.rpy").exists())
         self.assertIsNone(read_manifest(self.game))
+
+    def asset_file(self) -> GeneratedFile:
+        data = encode_png(2, 2, bytes([255, 0, 0, 255]) * 4, metadata={"Comment": "test"})
+        return GeneratedFile("pgf_ui/node_read.png", role="asset", data=data)
+
+    def test_install_binary_asset_and_uninstall(self) -> None:
+        asset = self.asset_file()
+        report = install_files(self.game, self.make_files() + [asset])
+        self.assertTrue(report.ok, report.errors)
+        target = self.game / "pgf_ui" / "node_read.png"
+        self.assertTrue(target.is_file())
+        self.assertTrue(is_generated_asset(target.read_bytes()))
+        self.assertEqual(verify_install(self.game), [])
+        manifest = read_manifest(self.game)
+        assert manifest is not None
+        self.assertIn("pgf_ui/node_read.png", [entry["name"] for entry in manifest["files"]])
+        report = uninstall_files(self.game)
+        self.assertTrue(report.ok, report.errors)
+        self.assertFalse(target.exists())
+        self.assertFalse((self.game / "pgf_ui").exists())
+        self.assertFalse((self.game / "pgf_manifest.json").exists())
+
+    def test_refuses_unmarked_binary_asset(self) -> None:
+        target = self.game / "pgf_ui" / "node_read.png"
+        target.parent.mkdir(parents=True)
+        target.write_bytes(b"\x89PNG\r\n\x1a\nnot ours")
+        report = install_files(self.game, self.make_files() + [self.asset_file()])
+        self.assertFalse(report.ok)
+        self.assertTrue(any("not created by PaperGalFlow" in error for error in report.errors))
+
+    def test_reinstall_removes_stale_asset(self) -> None:
+        install_files(self.game, self.make_files() + [self.asset_file()])
+        report = install_files(self.game, self.make_files())
+        self.assertTrue(report.ok, report.errors)
+        self.assertIn("pgf_ui/node_read.png", report.removed)
+        self.assertFalse((self.game / "pgf_ui" / "node_read.png").exists())
+        self.assertFalse((self.game / "pgf_ui").exists())
+
+    def test_static_check_rejects_bad_asset(self) -> None:
+        problems = static_check([GeneratedFile("pgf_ui/no.png", role="asset", data=b"nope")])
+        self.assertTrue(problems)
+        problems = static_check([GeneratedFile("pgf_ui/../evil.png", role="asset")])
+        self.assertTrue(problems)
 
     def test_static_check_rejects_bad_name(self) -> None:
         problems = static_check([GeneratedFile("../evil.rpy", "x\n")])

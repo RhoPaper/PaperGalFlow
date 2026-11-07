@@ -69,6 +69,10 @@ class StyleTokens:
     panel_padding: int = 18
     margin: int = 24
 
+    # nine patch geometry (rendered into generated PNG assets)
+    corner_radius: int = 16
+    border_width: int = 2
+
     # surfaces
     background: str = "#0b0f16"
     overlay: str = "#05080d"
@@ -228,8 +232,19 @@ def style_tokens(**overrides: Any) -> StyleTokens:
         normalized = normalize_color(current)
         if normalized:
             setattr(tokens, attribute, normalized)
-    for attribute in ("title_size", "node_text_size", "subtitle_size", "edge_text_size", "legend_size", "hint_size", "node_width", "node_height"):
+    for attribute in (
+        "title_size",
+        "node_text_size",
+        "subtitle_size",
+        "edge_text_size",
+        "legend_size",
+        "hint_size",
+        "node_width",
+        "node_height",
+    ):
         setattr(tokens, attribute, max(8, int(getattr(tokens, attribute))))
+    for attribute in ("corner_radius", "border_width"):
+        setattr(tokens, attribute, max(0, int(getattr(tokens, attribute))))
     tokens.palettes = {
         key: NodePalette(
             fill=normalize_color(palette.fill, tokens.panel),

@@ -81,6 +81,12 @@ class TokenTests(unittest.TestCase):
         self.assertEqual(tokens.title_size, 50)
         self.assertIn("read", tokens.palettes)
 
+    def test_geometry_roundtrip(self) -> None:
+        tokens = preset_tokens().merged(corner_radius=20, border_width=3)
+        restored = StyleTokens.from_dict(tokens.to_dict())
+        self.assertEqual(restored.corner_radius, 20)
+        self.assertEqual(restored.border_width, 3)
+
 
 class EvidenceTests(unittest.TestCase):
     def test_evidence_colors_fonts_sizes(self) -> None:
@@ -135,6 +141,8 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(set(style["palettes"]), {"read", "unread", "locked", "ending", "choice", "condition"})
         self.assertIn("style pgf_title_text:", theme.style_blocks)
         self.assertIn("style pgf_node_text:", theme.style_blocks)
+        self.assertEqual(style["corner_radius"], preset_tokens().corner_radius)
+        self.assertEqual(style["border_width"], preset_tokens().border_width)
 
     def test_theme_includes_font(self) -> None:
         tokens = tokens_from_evidence(StyleEvidence(fonts={"text": "MyFont.ttf"}))

@@ -9,6 +9,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
+from pgf_core.adapter import GeneratedArtifact
 from pgf_core.cli import main as cli_main
 from pgf_core.layout import compute_layout
 from pgf_core.model import EdgeKind, FlowGraph, FlowNode, NodeKind
@@ -53,6 +54,11 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(written[0].is_file())
         self.assertIn("PaperGalFlow", written[0].read_text(encoding="utf-8"))
 
+    def test_write_binary_nested_artifact(self) -> None:
+        artifact = GeneratedArtifact("pgf_ui/pixel.png", role="asset", data=b"\x89PNGdata")
+        written = write_artifacts(self.path / "out", [artifact])
+        self.assertEqual(written[0].read_bytes(), b"\x89PNGdata")
+
     def test_unsafe_artifact_name_rejected(self) -> None:
         class Bad:
             name = "../evil.rpy"
@@ -80,7 +86,10 @@ class RealPipelineTests(unittest.TestCase):
         self.assertIn(report.chains["entry"].chosen, ("quick_menu_patch", "overlay_button"))
         self.assertGreater(report.story.graph.stats()["nodes"], 20)
         names = {artifact.name for artifact in report.artifacts}
-        self.assertEqual(names, {"pgf_flowchart_screen.rpy", "pgf_menu_hook.rpy"})
+        self.assertIn("pgf_flowchart_screen.rpy", names)
+        self.assertIn("pgf_menu_hook.rpy", names)
+        self.assertIn("pgf_ui/node_read.png", names)
+        self.assertGreaterEqual(len([name for name in names if name.startswith("pgf_ui/")]), 20)
 
 
 class CliTests(unittest.TestCase):

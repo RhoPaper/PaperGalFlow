@@ -14,7 +14,7 @@ stays available no matter which visual entrance wins.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .adapter import (
@@ -288,16 +288,28 @@ class Pipeline:
 
 
 def write_artifacts(out_dir: Path, artifacts: list[Any]) -> list[Path]:
-    """Write generated artifacts to a plain output directory."""
+    """Write generated artifacts (text or binary) to a plain output directory."""
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
     for artifact in artifacts:
         name = str(getattr(artifact, "name", ""))
-        if not name or "/" in name or "\\" in name or name.startswith("."):
+        relative = PurePosixPath(name)
+        if (
+            not name
+            or "\\" in name
+            or relative.is_absolute()
+            or any(part in ("", ".", "..") for part in relative.parts)
+            or name.startswith(".")
+        ):
             raise PipelineError(f"refusing unsafe artifact name: {name!r}")
-        target = out_dir / name
-        target.write_text(artifact.content, encoding="utf-8", newline="\n")
+        target = out_dir.joinpath(*relative.parts)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        data = getattr(artifact, "data", None)
+        if data is not None:
+            target.write_bytes(data)
+        else:
+            target.write_text(str(getattr(artifact, "content", "")), encoding="utf-8", newline="\n")
         written.append(target)
     return written

@@ -23,6 +23,8 @@ from pgf_core.model import EdgeKind, FlowGraph, NodeKind
 from pgf_core.version import __version__
 from pgf_style import StyleTokens, build_theme
 
+from .assets import ui_manifest
+
 __all__ = ["GeneratedFile", "FlowchartEmitOptions", "emit_flowchart_screen"]
 
 DEFAULT_SCREEN_SIZE = (1920, 1080)
@@ -31,12 +33,21 @@ DEFAULT_SCREEN_SIZE = (1920, 1080)
 @dataclass(frozen=True)
 class GeneratedFile:
     name: str
-    content: str
+    content: str = ""
     role: str = "screen"
+    data: bytes | None = None
+
+    @property
+    def is_binary(self) -> bool:
+        return self.data is not None
+
+    @property
+    def payload(self) -> bytes:
+        return self.data if self.data is not None else self.content.encode("utf-8")
 
     @property
     def byte_size(self) -> int:
-        return len(self.content.encode("utf-8"))
+        return len(self.payload)
 
 
 @dataclass
@@ -163,12 +174,12 @@ def _predecessors(graph: FlowGraph) -> dict[str, tuple[str, ...]]:
     return {target: tuple(sorted(sources)) for target, sources in result.items()}
 
 
-def _legend(tokens: StyleTokens) -> list[tuple[str, str]]:
+def _legend(ui: dict[str, object]) -> list[tuple[str, str]]:
     return [
-        (tokens.palette("read").strip, "已读"),
-        (tokens.palette("unread").strip, "未读"),
-        (tokens.palette("locked").strip, "锁定"),
-        (tokens.palette("ending").strip, "结局"),
+        (str(ui["legend_read"]), "已读"),
+        (str(ui["legend_unread"]), "未读"),
+        (str(ui["legend_locked"]), "锁定"),
+        (str(ui["legend_ending"]), "结局"),
     ]
 
 
@@ -208,6 +219,7 @@ def emit_flowchart_screen(
     predecessors = _predecessors(graph)
     zoom = _default_zoom(layout, screen_size)
     theme = build_theme(tokens)
+    ui = ui_manifest(tokens)
 
     meta = {
         "tool": "PaperGalFlow",
@@ -236,7 +248,8 @@ def emit_flowchart_screen(
             f"PGF_EDGE_SEGMENTS = {_python_literal(segments)}",
             f"PGF_EDGE_LABELS = {_python_literal(labels)}",
             f"PGF_EDGE_ORDER = {_python_literal(edge_order)}",
-            f"PGF_LEGEND = {_python_literal(_legend(tokens))}",
+            f"PGF_LEGEND = {_python_literal(_legend(ui))}",
+            f"PGF_UI = {_python_literal(ui)}",
             f"PGF_STYLE = {_python_literal(theme.constants['PGF_STYLE'])}",
         ]
     )
@@ -268,7 +281,8 @@ def _header(
         f"# Chart: {len(graph.nodes)} nodes, {len(graph.edges)} edges, "
         f"{len(graph.endings())} endings\n"
         f"# Style: {tokens.name} ({tokens.source}), screen {screen_size[0]}x{screen_size[1]}\n"
-        f"# Uninstall: delete every pgf_*.rpy file from the game directory.\n"
+        f"# Assets: pgf_ui/*.png (generated nine-patch frames)\n"
+        f"# Uninstall: delete every pgf_*.rpy file and the pgf_ui directory.\n"
     )
 
 
@@ -453,7 +467,7 @@ screen pgf_flowchart():
 
     add Solid(PGF_STYLE["colors"]["overlay"])
 
-    add Solid(PGF_STYLE["colors"]["panel"]):
+    add Frame(PGF_UI["panel_top"], 20, 20):
         xpos 0
         ypos 0
         xysize (_pgf_screen_w, _pgf_title_h)
@@ -472,8 +486,8 @@ screen pgf_flowchart():
         xpos (_pgf_screen_w - 316)
         ypos _pgf_button_y
         xysize (46, 40)
-        background Solid(PGF_STYLE["colors"]["button_fill"])
-        hover_background Solid(PGF_STYLE["colors"]["button_hover"])
+        background Frame(PGF_UI["button"], 10, 10)
+        hover_background Frame(PGF_UI["button_hover"], 10, 10)
         action SetScreenVariable("pgf_zoom", max(0.35, pgf_zoom - 0.1))
         text "－":
             style "pgf_chrome_text"
@@ -484,8 +498,8 @@ screen pgf_flowchart():
         xpos (_pgf_screen_w - 260)
         ypos _pgf_button_y
         xysize (46, 40)
-        background Solid(PGF_STYLE["colors"]["button_fill"])
-        hover_background Solid(PGF_STYLE["colors"]["button_hover"])
+        background Frame(PGF_UI["button"], 10, 10)
+        hover_background Frame(PGF_UI["button_hover"], 10, 10)
         action SetScreenVariable("pgf_zoom", min(2.0, pgf_zoom + 0.1))
         text "＋":
             style "pgf_chrome_text"
@@ -496,8 +510,8 @@ screen pgf_flowchart():
         xpos (_pgf_screen_w - 204)
         ypos _pgf_button_y
         xysize (78, 40)
-        background Solid(PGF_STYLE["colors"]["button_fill"])
-        hover_background Solid(PGF_STYLE["colors"]["button_hover"])
+        background Frame(PGF_UI["button"], 10, 10)
+        hover_background Frame(PGF_UI["button_hover"], 10, 10)
         action SetScreenVariable("pgf_zoom", PGF_DEFAULT_ZOOM)
         text "适应":
             style "pgf_chrome_text"
@@ -509,8 +523,8 @@ screen pgf_flowchart():
         xpos (_pgf_screen_w - 116)
         ypos _pgf_button_y
         xysize (86, 40)
-        background Solid(PGF_STYLE["colors"]["button_fill"])
-        hover_background Solid(PGF_STYLE["colors"]["button_hover"])
+        background Frame(PGF_UI["button"], 10, 10)
+        hover_background Frame(PGF_UI["button_hover"], 10, 10)
         action Return()
         text "关闭":
             style "pgf_chrome_text"
@@ -548,8 +562,8 @@ screen pgf_flowchart():
                         ypos _pgf_label[2]
                         xanchor 0.5
                         yanchor 0.5
-                        background Solid(PGF_STYLE["colors"]["panel"])
-                        padding (7, 2)
+                        background Frame(PGF_UI["label"], 12, 12)
+                        padding (10, 3)
                         text _pgf_label[0]:
                             style "pgf_edge_text"
 
@@ -558,18 +572,18 @@ screen pgf_flowchart():
                     $ _pgf_ident = pgf_history.get(_pgf_node[0])
                     $ _pgf_pal = PGF_STYLE["palettes"][pgf_palette_key(_pgf_state, _pgf_node[1])]
 
-                    add Solid(PGF_STYLE["colors"]["shadow"]):
-                        xpos (_pgf_node[8] + 5)
-                        ypos (_pgf_node[9] + 6)
-                        xysize (_pgf_node[10], _pgf_node[11])
+                    add Frame(PGF_UI["shadow"], PGF_UI["frame"], PGF_UI["frame"]):
+                        xpos (_pgf_node[8] - 4)
+                        ypos (_pgf_node[9] + 3)
+                        xysize (_pgf_node[10] + 8, _pgf_node[11] + 8)
 
                     button:
                         xpos _pgf_node[8]
                         ypos _pgf_node[9]
                         xysize (_pgf_node[10], _pgf_node[11])
-                        background Solid(_pgf_pal["fill"])
-                        hover_background Solid(_pgf_pal["hover"])
-                        insensitive_background Solid(_pgf_pal["fill"])
+                        background Frame(PGF_UI["node_" + pgf_palette_key(_pgf_state, _pgf_node[1])], PGF_UI["frame"], PGF_UI["frame"])
+                        hover_background Frame(PGF_UI["node_" + pgf_palette_key(_pgf_state, _pgf_node[1]) + "_hover"], PGF_UI["frame"], PGF_UI["frame"])
+                        insensitive_background Frame(PGF_UI["node_" + pgf_palette_key(_pgf_state, _pgf_node[1])], PGF_UI["frame"], PGF_UI["frame"])
                         sensitive pgf_node_sensitive(_pgf_state, _pgf_ident)
                         action Confirm("确定要跳转到该处吗？", yes=RollbackToIdentifier(_pgf_ident or ""), no=None, confirm_selected=False)
                         hovered SetScreenVariable("pgf_hover", pgf_node_title(_pgf_state, _pgf_node[2]))
@@ -578,46 +592,26 @@ screen pgf_flowchart():
                         fixed:
                             xysize (_pgf_node[10], _pgf_node[11])
 
-                            add Solid(_pgf_pal["border"]):
-                                xpos 0
-                                ypos 0
-                                xysize (_pgf_node[10], 2)
-
-                            add Solid(_pgf_pal["border"]):
-                                xpos 0
-                                ypos (_pgf_node[11] - 2)
-                                xysize (_pgf_node[10], 2)
-
-                            add Solid(_pgf_pal["border"]):
-                                xpos 0
-                                ypos 0
-                                xysize (2, _pgf_node[11])
-
-                            add Solid(_pgf_pal["border"]):
-                                xpos (_pgf_node[10] - 2)
-                                ypos 0
-                                xysize (2, _pgf_node[11])
-
-                            add Solid(_pgf_pal["strip"]):
-                                xpos 0
-                                ypos 0
-                                xysize (6, _pgf_node[11])
-
                             text pgf_node_title(_pgf_state, _pgf_node[2]):
                                 style "pgf_node_text"
                                 color _pgf_pal["text"]
-                                xpos 16
+                                xpos 23
                                 ypos 10
-                                xsize (_pgf_node[10] - 30)
+                                xsize (_pgf_node[10] - 37)
                                 line_spacing 2
 
                             text pgf_node_kind_label(_pgf_node[1], _pgf_state, _pgf_ident):
                                 style "pgf_small_text"
                                 color _pgf_pal["strip"]
-                                xpos 16
+                                xpos 23
                                 ypos (_pgf_node[11] - 26)
 
-    add Solid(PGF_STYLE["colors"]["panel"]):
+    add PGF_UI["bar_shadow"]:
+        xpos 0
+        ypos _pgf_title_h
+        xysize (_pgf_screen_w, 28)
+
+    add Frame(PGF_UI["panel_bottom"], 20, 20):
         xpos 0
         ypos _pgf_footer_y
         xysize (_pgf_screen_w, _pgf_footer_h)
@@ -630,8 +624,8 @@ screen pgf_flowchart():
         for _pgf_legend_item in PGF_LEGEND:
             hbox:
                 spacing 8
-                add Solid(_pgf_legend_item[0]):
-                    xysize (16, 16)
+                add _pgf_legend_item[0]:
+                    xysize (18, 18)
                     yalign 0.5
                 text _pgf_legend_item[1]:
                     style "pgf_legend_text"
@@ -647,8 +641,8 @@ screen pgf_flowchart():
         xpos (_pgf_screen_w - 182)
         ypos (_pgf_footer_y + 14)
         xysize (38, 38)
-        background Solid(PGF_STYLE["colors"]["button_fill"])
-        hover_background Solid(PGF_STYLE["colors"]["button_hover"])
+        background Frame(PGF_UI["button"], 10, 10)
+        hover_background Frame(PGF_UI["button_hover"], 10, 10)
         action Function(pgf_scroll, pgf_yadj, -280)
         text "↑":
             style "pgf_chrome_text"
@@ -659,8 +653,8 @@ screen pgf_flowchart():
         xpos (_pgf_screen_w - 138)
         ypos (_pgf_footer_y + 14)
         xysize (38, 38)
-        background Solid(PGF_STYLE["colors"]["button_fill"])
-        hover_background Solid(PGF_STYLE["colors"]["button_hover"])
+        background Frame(PGF_UI["button"], 10, 10)
+        hover_background Frame(PGF_UI["button_hover"], 10, 10)
         action Function(pgf_scroll, pgf_yadj, 280)
         text "↓":
             style "pgf_chrome_text"
@@ -671,8 +665,8 @@ screen pgf_flowchart():
         xpos (_pgf_screen_w - 94)
         ypos (_pgf_footer_y + 14)
         xysize (38, 38)
-        background Solid(PGF_STYLE["colors"]["button_fill"])
-        hover_background Solid(PGF_STYLE["colors"]["button_hover"])
+        background Frame(PGF_UI["button"], 10, 10)
+        hover_background Frame(PGF_UI["button_hover"], 10, 10)
         action Function(pgf_scroll, pgf_xadj, -360)
         text "←":
             style "pgf_chrome_text"
@@ -683,8 +677,8 @@ screen pgf_flowchart():
         xpos (_pgf_screen_w - 50)
         ypos (_pgf_footer_y + 14)
         xysize (38, 38)
-        background Solid(PGF_STYLE["colors"]["button_fill"])
-        hover_background Solid(PGF_STYLE["colors"]["button_hover"])
+        background Frame(PGF_UI["button"], 10, 10)
+        hover_background Frame(PGF_UI["button_hover"], 10, 10)
         action Function(pgf_scroll, pgf_xadj, 360)
         text "→":
             style "pgf_chrome_text"

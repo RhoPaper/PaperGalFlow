@@ -77,6 +77,7 @@ class EmitTests(unittest.TestCase):
             "PGF_PREDECESSORS =",
             "PGF_EDGE_SEGMENTS =",
             "PGF_STYLE =",
+            "PGF_UI =",
             "renpy.seen_label",
             "def pgf_read_states",
             "def pgf_history_ids",
@@ -89,6 +90,21 @@ class EmitTests(unittest.TestCase):
         self.assertNotIn("persistent", self.file.content)
         self.assertNotIn("config.label_callbacks", self.file.content)
         self.assertNotIn("jump_out_of_context", self.file.content)
+
+    def test_nine_patch_assets_are_used(self) -> None:
+        for needle in (
+            'PGF_UI["panel_top"]',
+            'PGF_UI["panel_bottom"]',
+            'PGF_UI["label"]',
+            'PGF_UI["button"]',
+            'PGF_UI["shadow"]',
+            'PGF_UI["node_"',
+            'Frame(PGF_UI["shadow"]',
+            'Frame(PGF_UI["node_',
+        ):
+            self.assertIn(needle, self.file.content)
+        self.assertNotIn('add Solid(_pgf_pal["border"])', self.file.content)
+        self.assertNotIn('add Solid(_pgf_pal["strip"])', self.file.content)
 
     def test_deterministic(self) -> None:
         options = FlowchartEmitOptions(game_name="测试游戏", entry_label="start", screen_size=(1280, 720))

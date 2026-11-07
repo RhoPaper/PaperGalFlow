@@ -51,7 +51,7 @@ pgf build <game> --out out/game1
 
 生成并写入游戏 `game/` 目录：
 
-- 写入 `pgf_flowchart_screen.rpy`、`pgf_menu_hook.rpy`、`pgf_manifest.json`；
+- 写入 `pgf_flowchart_screen.rpy`、`pgf_menu_hook.rpy`、`pgf_ui/*.png`（25 个九宫格资产）和 `pgf_manifest.json`；
 - 如果目标文件存在但不含 PaperGalFlow 标记，默认拒绝覆盖；`--force` 才会覆盖；
 - `--dry-run` 只打印计划；
 - 安装后建议跑一次游戏 lint。
@@ -105,6 +105,7 @@ pgf uninstall "<game>"
 - `game/pgf_flowchart_screen.rpy`
 - `game/pgf_menu_hook.rpy`
 - 同名 `.rpyc`（Ren'Py 运行后生成）
+- `game/pgf_ui/`（整个目录）
 - `game/pgf_manifest.json`
 
 只删 `.rpy` 而不删 `.rpyc` 时，Ren'Py 会继续加载旧的编译文件。

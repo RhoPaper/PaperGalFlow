@@ -29,6 +29,7 @@ from pgf_style import StyleTokens, tokens_from_evidence
 
 from .analyze import AnalyzeOptions, AnalyzeResult, build_graph
 from .archive import ArchiveError, GameArchive
+from .assets import build_ui_assets
 from .entry import EntryOptions, build_entry_plan
 from .installer import install_files, uninstall_files, verify_install
 from .screen_emit import FlowchartEmitOptions, GeneratedFile, emit_flowchart_screen
@@ -353,9 +354,15 @@ class RenPyAdapter:
             GeneratedArtifact(flowchart.name, flowchart.content, "screen"),
             GeneratedArtifact(hook.name, hook.content, "entry"),
         ]
+        ui_assets = build_ui_assets(tokens)
+        artifacts.extend(
+            GeneratedArtifact(asset.name, role=asset.role, data=asset.data)
+            for asset in ui_assets
+        )
         warnings = list(plan.warnings)
         notes = list(plan.notes)
         notes.append(f"entry mode: {entry.mode}")
+        notes.append(f"generated {len(ui_assets)} nine-patch UI assets in pgf_ui/")
         return EmitResult(artifacts=artifacts, warnings=warnings, notes=notes)
 
     # -- installation --------------------------------------------------------
@@ -368,7 +375,10 @@ class RenPyAdapter:
         force: bool = False,
         dry_run: bool = False,
     ) -> InstallResult:
-        files = [GeneratedFile(a.name, a.content, a.role) for a in artifacts]
+        files = [
+            GeneratedFile(a.name, a.content, a.role, data=a.data)
+            for a in artifacts
+        ]
         payload = {
             "game": info.game_name,
             "engine": info.engine,

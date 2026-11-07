@@ -4,7 +4,13 @@ import struct
 import unittest
 import zlib
 
-from pgf_adapter_renpy.png import PngError, color_stats, decode_png
+from pgf_adapter_renpy.png import (
+    PngError,
+    color_stats,
+    decode_png,
+    encode_png,
+    is_generated_asset,
+)
 
 from .game_paths import game1_dir, has_game1
 
@@ -146,3 +152,27 @@ class RealAssetTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PngEncodeTests(unittest.TestCase):
+    def test_roundtrip_rgba(self) -> None:
+        pixels = bytes(
+            [255, 0, 0, 255, 0, 255, 0, 128, 0, 0, 255, 0, 12, 34, 56, 255]
+        )
+        data = encode_png(2, 2, pixels)
+        image = decode_png(data)
+        self.assertEqual((image.width, image.height), (2, 2))
+        self.assertEqual(image.pixels, pixels)
+        self.assertTrue(is_generated_asset(data))
+
+    def test_metadata_and_marker(self) -> None:
+        data = encode_png(1, 1, bytes([1, 2, 3, 4]), metadata={"Comment": "hello"})
+        self.assertIn(b"hello", data)
+        self.assertIn(b"PaperGalFlow", data[:2048])
+        self.assertFalse(is_generated_asset(data.replace(b"PaperGalFlow", b"SomethingElse")))
+
+    def test_rejects_bad_dimensions(self) -> None:
+        with self.assertRaises(PngError):
+            encode_png(0, 1, b"")
+        with self.assertRaises(PngError):
+            encode_png(2, 2, b"\x00" * 4)

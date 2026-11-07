@@ -209,7 +209,8 @@ def _cmd_build(args: argparse.Namespace) -> int:
         _print()
         _print(f"已生成 {len(written)} 个文件到 {out_dir.resolve()}:")
         for path in written:
-            _print(f"  · {path.name} ({path.stat().st_size} bytes)")
+            relative = path.relative_to(out_dir).as_posix()
+            _print(f"  · {relative} ({path.stat().st_size} bytes)")
         _print("安装到游戏: pgf install <游戏目录>")
     return 0
 
