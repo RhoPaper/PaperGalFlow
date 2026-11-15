@@ -130,6 +130,29 @@ class TextParserTests(unittest.TestCase):
         self.assertIn("多行", says[0])
         self.assertIn("旁白", says[0])
 
+    def test_while_for_break_continue(self) -> None:
+        source = """\
+label start:
+    while flag:
+        "loop"
+        break
+    for i, item in enumerate(items):
+        if item:
+            continue
+        "x"
+    return
+"""
+        script = parse_script(source, "loops.rpy")
+        block = script.labels()["start"].block
+        self.assertEqual(block[0].kind, Stmt.WHILE)
+        self.assertEqual(block[0].condition, "flag")
+        self.assertEqual(block[0].block[1].kind, Stmt.BREAK)
+        loop = block[1]
+        self.assertEqual(loop.kind, Stmt.FOR)
+        self.assertEqual(loop.name, "i, item")
+        self.assertEqual(loop.source, "enumerate(items)")
+        self.assertEqual(loop.block[0].entries[0].block[0].kind, Stmt.CONTINUE)
+
     def test_screens(self) -> None:
         screens = self.script.screens()
         self.assertIn("quick_menu", screens)

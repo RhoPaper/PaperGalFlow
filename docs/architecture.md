@@ -74,7 +74,8 @@ GameArchive（磁盘 + RPA 虚拟文件系统）
    │  解析 .rpy（自研文本解析器）或 .rpyc（白名单反序列化 + 惰性 stub）
    ▼
 ScriptFile（统一语句模型）
-   │  analyze.py：label 遍历、menu/if 决策节点、jump/call/return、局部 label、fallthrough
+   │  analyze.py：label 遍历、menu/if/while/for 决策节点、break/continue、
+   │             jump/call/return、局部 label、动态表达式与 fallthrough
    ▼
 FlowGraph
    │

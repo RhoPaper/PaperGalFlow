@@ -6,6 +6,28 @@ gets its own version so the history stays traceable.
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-15
+
+### Added
+
+- **Loop control flow.**  `while` and `for` become explicit loop decision
+  nodes; menus/jumps inside a loop, `break` and `continue` are graphed, and
+  loop bodies link back to the loop head.  Loop nodes are excluded from the
+  trivial-condition merge so the cycle stays visible.
+- **Local labels and dynamic jumps/calls.**  Compiled `.label` names and
+  `.target` references are resolved against their global label.  `jump
+  expression` / `call expression` resolve string literals and `define`
+  constants; unresolved dynamic targets are reported as notes instead of
+  being silently dropped.
+- **Translation variants.**  `Translate*` blocks and `TranslateSay` metadata
+  are excluded from story graph extraction without discarding ordinary
+  dialogue.
+
+### Changed
+
+- `script_model` has explicit `WHILE` / `FOR` / `BREAK` / `CONTINUE`
+  statement kinds; the text parser and RPYC reader both populate them.
+
 ## [0.5.1] - 2026-11-15
 
 ### Added

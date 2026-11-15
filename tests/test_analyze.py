@@ -234,3 +234,121 @@ class RealGame2Tests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LoopAndDynamicTests(unittest.TestCase):
+    def test_while_loop_menu_and_break(self) -> None:
+        source = '''\
+label start:
+    "开始"
+    while flag:
+        menu:
+            "继续":
+                "再试一次"
+            "离开":
+                break
+    "结束"
+    return
+'''
+        result = build_graph([parse_script(source, "loop.rpy")])
+        loops = [n for n in result.graph.nodes.values() if n.title == "循环"]
+        self.assertEqual(len(loops), 1)
+        loop_id = loops[0].id
+        outgoing = result.graph.outgoing(loop_id)
+        self.assertEqual({edge.kind for edge in outgoing}, {EdgeKind.CONDITION})
+        self.assertTrue(any(edge.label == "循环体" for edge in outgoing))
+        self.assertTrue(any(edge.label == "结束循环" for edge in outgoing))
+        menu_edges = [
+            edge for edge in result.graph.edges if edge.kind is EdgeKind.CHOICE
+        ]
+        self.assertGreaterEqual(len(menu_edges), 2)
+
+    def test_for_loop_and_continue(self) -> None:
+        source = '''\
+label start:
+    for item in items:
+        if item:
+            continue
+        "x"
+    "done"
+    return
+'''
+        result = build_graph([parse_script(source, "loop.rpy")])
+        self.assertTrue(any(node.title == "遍历" for node in result.graph.nodes.values()))
+        self.assertTrue(any(edge.kind is EdgeKind.CONDITION for edge in result.graph.edges))
+
+    def test_break_outside_loop_is_reported(self) -> None:
+        source = '''\
+label start:
+    break
+    "after"
+    return
+'''
+        result = build_graph([parse_script(source, "loop.rpy")])
+        self.assertTrue(any("outside a loop" in warning for warning in result.warnings))
+
+    def test_dynamic_call_from_constant(self) -> None:
+        source = '''\
+define route = "branch"
+label start:
+    call expression route
+    "after call"
+    return
+label branch:
+    "branch"
+    return
+'''
+        result = build_graph(
+            [parse_script(source, "dynamic.rpy")], AnalyzeOptions(include_side_labels=True)
+        )
+        calls = [edge for edge in result.graph.edges if edge.kind is EdgeKind.CALL]
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0].target, "branch")
+
+    def test_dynamic_jump_literal(self) -> None:
+        source = '''\
+label start:
+    jump expression "branch"
+label branch:
+    "branch"
+    return
+'''
+        result = build_graph(
+            [parse_script(source, "dynamic.rpy")],
+            AnalyzeOptions(collapse_routers=False),
+        )
+        self.assertTrue(any(edge.target == "branch" for edge in result.graph.edges))
+
+    def test_unresolved_dynamic_call_is_noted(self) -> None:
+        source = '''\
+label start:
+    call expression get_route()
+    "after"
+    return
+'''
+        result = build_graph([parse_script(source, "dynamic.rpy")])
+        self.assertTrue(any("dynamic call not resolved" in note for note in result.notes))
+
+    def test_translate_say_is_skipped(self) -> None:
+        from pgf_adapter_renpy.script_model import ScriptFile, Statement, Stmt
+
+        translated = Statement(
+            kind=Stmt.SAY,
+            line=1,
+            text="translated",
+            meta={"translate": "1"},
+        )
+        original = Statement(kind=Stmt.SAY, line=2, text="original")
+        label = Statement(
+            kind=Stmt.LABEL,
+            line=0,
+            name="start",
+            block=[translated, original],
+        )
+        script = ScriptFile("x", statements=[label])
+        result = build_graph([script])
+        self.assertEqual(result.graph.nodes["start"].title, "original")
+
+
+if __name__ == "__main__":
+    unittest.main()

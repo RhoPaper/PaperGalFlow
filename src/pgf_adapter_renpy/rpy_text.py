@@ -40,6 +40,8 @@ _INIT_RE = re.compile(r"^init(?:\s+-?\d+)?\s*:")
 _PYTHON_RE = re.compile(r"^python(?:\s+hide)?\s*:")
 _IF_RE = re.compile(r"^if\s+(.*?)\s*:$")
 _ELIF_RE = re.compile(r"^elif\s+(.*?)\s*:$")
+_WHILE_RE = re.compile(r"^while\s+(.*?)\s*:$")
+_FOR_RE = re.compile(r"^for\s+(.+?)\s+in\s+(.+?)\s*:$")
 _MENU_RE = re.compile(r"^menu(?:\s+.*?)?\s*:$")
 _JUMP_RE = re.compile(r"^jump\s+(.+?)\s*$")
 _CALL_RE = re.compile(r"^call\s+(.+?)\s*$")
@@ -395,6 +397,38 @@ class _TextParser:
                     continue
                 break
             return [Statement(kind=Stmt.IF, line=line.number + 1, filename=self.filename, entries=entries)]
+
+        match = _WHILE_RE.match(text)
+        if match:
+            block = self._parse_block(self._child_indent(indent))
+            return [
+                Statement(
+                    kind=Stmt.WHILE,
+                    line=line.number + 1,
+                    filename=self.filename,
+                    condition=match.group(1).strip(),
+                    block=block,
+                )
+            ]
+
+        match = _FOR_RE.match(text)
+        if match:
+            block = self._parse_block(self._child_indent(indent))
+            return [
+                Statement(
+                    kind=Stmt.FOR,
+                    line=line.number + 1,
+                    filename=self.filename,
+                    name=match.group(1).strip(),
+                    source=match.group(2).strip(),
+                    block=block,
+                )
+            ]
+
+        if text == "break":
+            return [Statement(kind=Stmt.BREAK, line=line.number + 1, filename=self.filename)]
+        if text == "continue":
+            return [Statement(kind=Stmt.CONTINUE, line=line.number + 1, filename=self.filename)]
 
         match = _JUMP_RE.match(text)
         if match:

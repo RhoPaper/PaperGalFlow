@@ -13,6 +13,7 @@ where a click should send the player.
 
 from __future__ import annotations
 
+import ast
 import re
 from dataclasses import dataclass, field
 from typing import Iterable, Iterator
@@ -24,7 +25,12 @@ from .script_model import ScriptFile, Statement, Stmt
 
 __all__ = ["AnalyzeOptions", "AnalyzeResult", "build_graph"]
 
-_TRANSLATE_TYPES = {"translate", "Translate", "TranslateBlock", "TranslatePython"}
+_TRANSLATE_TYPES = {
+    "translate",
+    "Translate",
+    "TranslateBlock",
+    "TranslatePython",
+}
 _TEXT_TAG_RE = re.compile(r"\{[^{}]*\}")
 _WHITESPACE_RE = re.compile(r"\s+")
 
@@ -106,9 +112,16 @@ def clean_text(text: str, limit: int = 42) -> str:
     return text
 
 
+def _is_translate(statement: Statement) -> bool:
+    if statement.meta.get("translate") == "1":
+        return True
+    kind = str(statement.meta.get("renpy_type", ""))
+    return kind in _TRANSLATE_TYPES or kind.lower().startswith("translate")
+
+
 def _iter_statements(statements: Iterable[Statement]) -> Iterator[Statement]:
     for statement in statements:
-        if statement.meta.get("renpy_type") in _TRANSLATE_TYPES:
+        if _is_translate(statement):
             continue
         yield statement
         for block in statement.iter_blocks():
@@ -122,7 +135,7 @@ def _first_says(statements: Iterable[Statement], limit: int = 2) -> tuple[str, .
 
     def walk(block: Iterable[Statement]) -> bool:
         for statement in block:
-            if statement.meta.get("renpy_type") in _TRANSLATE_TYPES:
+            if _is_translate(statement):
                 continue
             if statement.kind == Stmt.SAY and statement.text.strip():
                 found.append(statement.text)
@@ -145,7 +158,7 @@ def _first_say(statements: Iterable[Statement]) -> str:
 def _last_say(statements: Iterable[Statement]) -> str:
     last = ""
     for statement in statements:
-        if statement.meta.get("renpy_type") in _TRANSLATE_TYPES:
+        if _is_translate(statement):
             continue
         if statement.kind == Stmt.SAY and statement.text.strip():
             last = statement.text
@@ -162,6 +175,12 @@ def _has_say(statements: Iterable[Statement]) -> bool:
 
 def _has_menu(statements: Iterable[Statement]) -> bool:
     return any(s.kind == Stmt.MENU for s in _iter_statements(statements))
+
+
+@dataclass
+class _LoopContext:
+    head: str
+    exit_join: "_Join"
 
 
 @dataclass
@@ -271,9 +290,12 @@ class _GraphBuilder:
         self.entry_label = ""
         self.special_endings = dict(self.options.special_endings)
         self.special_nodes: dict[str, str] = {}
+        self.loop_stack: list[_LoopContext] = []
+        self.constants: dict[str, str] = {}
 
     # -- setup ---------------------------------------------------------------
     def build(self) -> AnalyzeResult:
+        self._collect_constants()
         self._collect_labels()
         if not self.labels:
             self.warnings.append("no story labels were found in the game scripts")
@@ -311,6 +333,31 @@ class _GraphBuilder:
             label_count=len(self.labels),
             script_count=len(self.scripts),
         )
+
+    def _collect_constants(self) -> None:
+        for script in self.scripts:
+            for name, raw in script.defines().items():
+                try:
+                    value = ast.literal_eval(str(raw).strip())
+                except (ValueError, SyntaxError):
+                    continue
+                if isinstance(value, str):
+                    self.constants[name] = value
+                    self.constants.setdefault(name.split(".")[-1], value)
+
+    def _dynamic_target(self, source: str) -> str:
+        text = str(source or "").strip()
+        if not text:
+            return ""
+        try:
+            literal = ast.literal_eval(text)
+        except (ValueError, SyntaxError):
+            literal = None
+        if isinstance(literal, str):
+            return literal
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", text):
+            return self.constants.get(text, "")
+        return ""
 
     def _collect_labels(self) -> None:
         for script_index, script in enumerate(self.scripts):
@@ -591,8 +638,69 @@ class _GraphBuilder:
                 pending_joins = [rest]
                 pending_kind, pending_label = EdgeKind.FLOW, ""
                 continue
+            if kind in (Stmt.WHILE, Stmt.FOR):
+                title = "循环" if kind == Stmt.WHILE else "遍历"
+                node_id = self._decision_node(
+                    scope,
+                    statement.line,
+                    NodeKind.CONDITION,
+                    title,
+                    scope,
+                    "while" if kind == Stmt.WHILE else "for",
+                )
+                attach(node_id)
+                rest = _Join(self)
+                body_join = _Join(self)
+                self.graph.nodes[node_id].meta["loop"] = "1"
+                self.loop_stack.append(_LoopContext(node_id, rest))
+                try:
+                    self._analyze_seq(
+                        statement.block,
+                        node_id,
+                        body_join,
+                        EdgeKind.CONDITION,
+                        "循环体",
+                        scope,
+                    )
+                finally:
+                    self.loop_stack.pop()
+                if body_join.has_pending:
+                    body_join.bind_node(node_id)
+                rest.incoming(node_id, EdgeKind.CONDITION, "结束循环")
+                anchor = None
+                pending_joins = [rest]
+                pending_kind, pending_label = EdgeKind.FLOW, ""
+                continue
+            if kind in (Stmt.BREAK, Stmt.CONTINUE):
+                if not self.loop_stack:
+                    self.warnings.append(
+                        f"{kind} outside a loop at {statement.filename}:{statement.line}"
+                    )
+                    continue
+                context = self.loop_stack[-1]
+                if kind == Stmt.BREAK:
+                    if anchor is not None:
+                        context.exit_join.incoming(anchor, pending_kind, pending_label)
+                    else:
+                        for pending in pending_joins:
+                            pending.bind_join(context.exit_join)
+                        pending_joins.clear()
+                else:
+                    if anchor is not None:
+                        self.connect(anchor, context.head, pending_kind, pending_label)
+                    else:
+                        for pending in pending_joins:
+                            pending.bind_node(context.head)
+                        pending_joins.clear()
+                pending_kind, pending_label = EdgeKind.FLOW, ""
+                return
             if kind == Stmt.JUMP:
-                target = statement.target
+                target = statement.target or self._dynamic_target(statement.source)
+                if not target and statement.source:
+                    self.notes.append(
+                        f"dynamic jump not resolved at {statement.filename}:{statement.line}: "
+                        f"{statement.source}"
+                    )
                 target_node = self.label_nodes.get(target)
                 if target_node is None and target in self.special_endings:
                     target_node = self._special_ending(target)
@@ -612,7 +720,12 @@ class _GraphBuilder:
                 pending_kind, pending_label = EdgeKind.FLOW, ""
                 return
             if kind == Stmt.CALL:
-                target = statement.target
+                target = statement.target or self._dynamic_target(statement.source)
+                if not target and statement.source:
+                    self.notes.append(
+                        f"dynamic call not resolved at {statement.filename}:{statement.line}: "
+                        f"{statement.source}"
+                    )
                 target_node = self.label_nodes.get(target)
                 if target_node is None:
                     if target and target not in self.special_endings and not target.startswith("_"):
@@ -706,6 +819,8 @@ class _GraphBuilder:
             for node_id in list(self.graph.nodes):
                 node = self.graph.nodes.get(node_id)
                 if node is None or node.kind is not NodeKind.CONDITION:
+                    continue
+                if node.meta.get("loop"):
                     continue
                 outgoing = [edge for edge in self.graph.edges if edge.source == node_id]
                 if not outgoing:
