@@ -19,9 +19,9 @@ gets its own version so the history stays traceable.
   expression` / `call expression` resolve string literals and `define`
   constants; unresolved dynamic targets are reported as notes instead of
   being silently dropped.
-- **Translation variants.**  `Translate*` blocks and `TranslateSay` metadata
-  are excluded from story graph extraction without discarding ordinary
-  dialogue.
+- **Translation variants.**  `Translate*` blocks are excluded from story
+  graph extraction; `TranslateSay` dialogue that belongs to the main script
+  is kept (several commercial games use it for the primary text).
 
 ### Changed
 
