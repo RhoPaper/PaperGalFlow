@@ -18,6 +18,10 @@ class Stmt:
     SAY = "say"
     MENU = "menu"
     IF = "if"
+    WHILE = "while"
+    FOR = "for"
+    BREAK = "break"
+    CONTINUE = "continue"
     JUMP = "jump"
     CALL = "call"
     RETURN = "return"
@@ -41,6 +45,14 @@ class ScreenElement:
     text: str = ""
     target: str = ""
     condition: str = ""
+    #: All positional arguments of an ``SLDisplayable`` (``grid 3 2``, ``key "K_F10"`` ...).
+    positionals: list[str] = field(default_factory=list)
+    #: ``SLIf``/``SLShowIf`` branches: ``(condition, children)``; ``condition=""`` is ``else``.
+    branches: list[tuple[str, list["ScreenElement"]]] = field(default_factory=list)
+    #: ``SLFor`` loop header.
+    for_variable: str = ""
+    for_expression: str = ""
+    for_index: str = ""
 
     def walk(self) -> Iterator["ScreenElement"]:
         yield self
@@ -135,6 +147,10 @@ class Statement:
             Stmt.SAY,
             Stmt.MENU,
             Stmt.IF,
+            Stmt.WHILE,
+            Stmt.FOR,
+            Stmt.BREAK,
+            Stmt.CONTINUE,
             Stmt.JUMP,
             Stmt.CALL,
             Stmt.RETURN,

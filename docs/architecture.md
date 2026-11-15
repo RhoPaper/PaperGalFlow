@@ -121,8 +121,8 @@ FlowGraph
 
 两种生成文件：
 
-- **quick_menu_patch**：仅当 `quick_menu` 有 `.rpy` 源码时可用。生成文件把原始 screen 正文原样复制为 `pgf_quick_menu_base`，再在 `init offset = 999` 后定义同名 `quick_menu`（优先级 499，晚于游戏原始 screen），内容为 `use pgf_quick_menu_base` + 新按钮。
-- **overlay_button**：只有 `.rpyc` 时使用。从 quick_menu 的 SL2 AST 中提取每个按钮的 `xpos/ypos` 与实际 PNG 尺寸，算出包围盒，选一个不与原按钮重叠的位置（优先右、左，其次下、上），生成一个 `config.overlay_screens` 中的同伴按钮。
+- **quick_menu_patch**：`quick_menu` 有 `.rpy` 源码时复制正文；只有 `.rpyc` 时先用 `screen_lang.decompile_screen` 从 SL2 树重建正文。生成文件把正文和 screen 级属性复制为 `pgf_quick_menu_base`，再在 `init offset = 999` 后定义同名 `quick_menu`（优先级 499，晚于游戏原始 screen），内容为 `use pgf_quick_menu_base` + 新按钮。ATL/未知节点会拒绝重建并回退悬浮按钮。
+- **overlay_button**：重建失败或强制 `overlay_button` 时使用。从 quick_menu 的 SL2 AST 中提取每个按钮的 `xpos/ypos` 与实际 PNG 尺寸，算出包围盒，选一个不与原按钮重叠的位置（优先右、左，其次下、上），生成一个 `config.overlay_screens` 中的同伴按钮。
 
 两种模式都会生成 `pgf_hotkey` screen 并注册 `config.keymap["pgf_flowchart"] = ["K_F10"]`，因此快捷菜单被隐藏时仍可打开。
 
@@ -142,7 +142,7 @@ src/
     runtime/pgf_runtime.py     # 宿主预览/测试用的旧状态机（不写入游戏）
   pgf_adapter_renpy/
     rpa.py archive.py rpyc.py rpy_text.py script_model.py
-    analyze.py style_probe.py png.py assets.py
+    analyze.py style_probe.py png.py assets.py screen_lang.py
     screen_emit.py entry.py installer.py adapter.py
   pgf_style/
     tokens.py colors.py evidence.py sources.py presets.py renpy_theme.py

@@ -7,11 +7,12 @@
 - 流程图数据在 `pgf install` 时固化进 `.rpy`。玩家之后安装剧情 Mod、新增 label 或修改分支，**流程图不会自动更新**，需要重新运行 `pgf install`。
 - 这是设计选择，不是 bug：它换来“无需外部进程、无需运行时解析脚本、删除文件即回滚”。
 
-## 2. quick_menu 源码改写并非总是可用
+## 2. quick_menu 源码改写与重建
 
-- 商业发行版常常只带 `.rpyc`。本版本不反编译 screen language AST，因此走“悬浮同伴按钮”降级路径，而不是修改 quick_menu。
+- 有 `.rpy` 源码时直接复制正文；只有 `.rpyc` 时会尝试把编译后的 SL2 树重建为 screen language，再按同样方式包装。重建覆盖 displayable、`use`、`if/elif/else`、`for`、属性与缩进；ATL/transform、未知节点或过深嵌套会判定为不安全并回退到悬浮按钮。
+- 重建是**结构性近似**，不是官方反编译器：注释、原始表达式格式、ATL 细节不会保留。生成后会经过内置解析检查和 Ren'Py lint 建议；若游戏使用极端自定义 screen，仍应人工检查 `pgf_menu_hook.rpy`。
 - 悬浮按钮位置由 quick_menu 的 `xpos/ypos` 和按钮 PNG 尺寸推断；极端自定义布局（相对定位、动态 HLayout、运行时计算坐标）可能得到不理想的位置。此时仍可用 F10。
-- `quick_menu_patch` 模式会复制原始 screen 正文；如果原 screen 依赖 `screen` 级属性/变体/参数，包装层只覆盖了正文，极端情况下需要人工调整生成文件。
+- `quick_menu_patch` 现在会复制 screen 级属性（如 `style_prefix`、`zorder`、`modal`）到基础 screen 和包装 screen。
 
 ## 3. AI 环节是可选后端
 

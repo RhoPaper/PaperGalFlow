@@ -509,7 +509,7 @@ def pgf_scroll(adjustment, delta):
 
 def _screen_source() -> str:
     return '''\
-screen pgf_flowchart():
+screen pgf_flowchart(pgf_from_menu=False):
     modal True
     zorder 200
 
@@ -596,7 +596,7 @@ screen pgf_flowchart():
         xysize (86, 40)
         background Frame(PGF_UI["button"], 10, 10)
         hover_background Frame(PGF_UI["button_hover"], 10, 10)
-        action Return()
+        action (Hide("pgf_flowchart") if pgf_from_menu else Return())
         text "关闭":
             style "pgf_chrome_text"
             xalign 0.5
@@ -756,5 +756,5 @@ screen pgf_flowchart():
             xalign 0.5
             yalign 0.5
 
-    key "game_menu" action Return()
+    key "game_menu" action (Hide("pgf_flowchart") if pgf_from_menu else Return())
 '''

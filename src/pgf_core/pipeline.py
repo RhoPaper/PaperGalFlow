@@ -61,6 +61,7 @@ class PipelineOptions:
     screenshots: tuple[str, ...] = ()
     vision_endpoint: str = ""
     vision_model: str = ""
+    gamepad: bool = False
 
     def normalized(self) -> "PipelineOptions":
         return PipelineOptions(
@@ -76,6 +77,7 @@ class PipelineOptions:
             screenshots=tuple(str(item) for item in self.screenshots),
             vision_endpoint=self.vision_endpoint.strip(),
             vision_model=self.vision_model.strip(),
+            gamepad=bool(self.gamepad),
         )
 
 
@@ -315,7 +317,10 @@ class Pipeline:
                     story.graph,
                     style.tokens,
                     mode=step,
-                    options={"entry_label": self.options.entry_label},
+                    options={
+                        "entry_label": self.options.entry_label,
+                        "gamepad": self.options.gamepad,
+                    },
                 )
             except Exception as exc:
                 chain.add(step, STATUS_FAILED, str(exc))

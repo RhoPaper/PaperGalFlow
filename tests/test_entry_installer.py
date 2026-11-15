@@ -69,6 +69,7 @@ class EntryPlanTests(unittest.TestCase):
         self.assertIn("use pgf_quick_menu_base", content)
         self.assertIn("init offset = 999", content)
         self.assertIn('imagebutton:', content)
+        self.assertIn("screen pgf_hotkey():", content)
         self.assertEqual(static_check([plan.file]), [])
 
     def test_force_overlay_wins(self) -> None:
@@ -78,6 +79,41 @@ class EntryPlanTests(unittest.TestCase):
             EntryOptions(force_mode="overlay_button", screen_size=(1280, 720)),
         )
         self.assertEqual(plan.mode, "overlay_button")
+
+    def test_title_and_game_menu_modes(self) -> None:
+        for mode, condition in (
+            ("title_menu", "if main_menu:"),
+            ("game_menu", 'if not main_menu and renpy.get_screen("game_menu") is not None:'),
+        ):
+            plan = build_entry_plan(
+                self.tokens,
+                quick_menu(has_source=False),
+                EntryOptions(screen_size=(1280, 720), force_mode=mode),
+            )
+            self.assertEqual(plan.mode, mode)
+            content = plan.file.content
+            self.assertIn(condition, content)
+            self.assertIn('action Show("pgf_flowchart", pgf_from_menu=True)', content)
+            self.assertIn("config.overlay_screens", content)
+            self.assertEqual(static_check([plan.file]), [])
+            x, y = plan.position
+            self.assertLessEqual(x + plan.size[0], 1280)
+            self.assertLessEqual(y + plan.size[1], 720)
+
+    def test_gamepad_keys_are_optional(self) -> None:
+        normal = build_entry_plan(
+            self.tokens, quick_menu(has_source=False), EntryOptions(screen_size=(1280, 720))
+        )
+        self.assertNotIn("pad_y", normal.file.content)
+        gamepad = build_entry_plan(
+            self.tokens,
+            quick_menu(has_source=False),
+            EntryOptions(screen_size=(1280, 720), force_mode="gamepad"),
+        )
+        self.assertIn("pad_y", gamepad.file.content)
+        self.assertIn("pad_start", gamepad.file.content)
+        self.assertEqual(gamepad.hotkey, ("K_F10", "pad_y", "pad_start"))
+        self.assertEqual(static_check([gamepad.file]), [])
 
     def test_missing_quick_menu_uses_overlay(self) -> None:
         plan = build_entry_plan(self.tokens, None, EntryOptions(screen_size=(1920, 1080)))
@@ -104,6 +140,8 @@ class InstallerTests(unittest.TestCase):
         )
         hook = (
             "# PaperGalFlow test hook\n"
+            "screen pgf_hotkey():\n"
+            "    key \"pgf_flowchart\" action ShowMenu(\"pgf_flowchart\")\n"
             "screen pgf_quick_button():\n"
             "    textbutton \"流程图\" action ShowMenu(\"pgf_flowchart\")\n"
         )

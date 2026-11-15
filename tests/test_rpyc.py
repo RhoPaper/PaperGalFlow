@@ -5,7 +5,13 @@ import struct
 import unittest
 import zlib
 
-from pgf_adapter_renpy.rpyc import RPYC2_HEADER, RpycError, decode_rpyc, extract_payload
+from pgf_adapter_renpy.rpyc import (
+    RPYC2_HEADER,
+    RpycError,
+    decode_rpyc,
+    extract_payload,
+    resolve_local_labels,
+)
 from pgf_adapter_renpy.script_model import Stmt
 
 from .game_paths import game1_dir, game2_dir, has_game1, has_game2
@@ -65,6 +71,27 @@ class ContainerTests(unittest.TestCase):
         header = RPYC2_HEADER + b"\x00" * 36
         with self.assertRaises(RpycError):
             extract_payload(header)
+
+
+class LocalLabelTests(unittest.TestCase):
+    def test_local_names_and_targets(self) -> None:
+        from pgf_adapter_renpy.script_model import Statement, Stmt
+
+        child = Statement(
+            kind=Stmt.LABEL,
+            name=".route",
+            block=[
+                Statement(kind=Stmt.JUMP, target=".other"),
+                Statement(kind=Stmt.CALL, target=".route"),
+            ],
+        )
+        outer = Statement(kind=Stmt.LABEL, name="start", block=[child])
+        statements = [outer]
+        resolve_local_labels(statements)
+        self.assertEqual(statements[0].name, "start")
+        self.assertEqual(child.name, "start.route")
+        self.assertEqual(child.block[0].target, "start.other")
+        self.assertEqual(child.block[1].target, "start.route")
 
 
 class DecodeTests(unittest.TestCase):

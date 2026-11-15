@@ -17,6 +17,7 @@ from pgf_style import StyleEvidence, UiSample, luminance as _luminance, lighten 
 
 from .archive import ArchiveError, GameArchive
 from .png import PngError, analyze_png
+from .screen_lang import decompile_screen
 from .script_model import ScreenInfo, ScriptFile
 
 __all__ = [
@@ -70,6 +71,10 @@ class QuickMenuProbe:
     found: bool = False
     has_source: bool = False
     source: str = ""
+    source_format: str = ""
+    decompiled: bool = False
+    decompile_warnings: list[str] = field(default_factory=list)
+    properties: dict[str, str] = field(default_factory=dict)
     parameters: str = ""
     buttons: list[QuickButton] = field(default_factory=list)
     screen_size: tuple[int, int] | None = None
@@ -173,6 +178,8 @@ class StyleProbeResult:
                 "found": bool(self.quick_menu and self.quick_menu.found),
                 "buttons": self.quick_menu.button_count if self.quick_menu else 0,
                 "has_source": bool(self.quick_menu and self.quick_menu.has_source),
+                "decompiled": bool(self.quick_menu and self.quick_menu.decompiled),
+                "source_format": self.quick_menu.source_format if self.quick_menu else "",
                 "bbox": list(self.quick_menu.bbox) if self.quick_menu and self.quick_menu.bbox else None,
             },
             "warnings": len(self.warnings),
@@ -331,10 +338,23 @@ def _find_quick_menu(
         found=True,
         has_source=bool(info.source),
         source=info.source,
+        source_format="rpy" if info.source else "rpyc",
+        properties=dict(info.properties),
         parameters=info.parameters or "()",
         screen_size=screen_size,
         used_by_say=used_by_say,
     )
+    if not info.source:
+        decompiled = decompile_screen(info)
+        if decompiled.supported and decompiled.source:
+            probe.source = decompiled.source
+            probe.decompiled = True
+            probe.source_format = "rpyc-decompiled"
+            probe.parameters = decompiled.parameters or "()"
+            probe.properties = dict(decompiled.properties)
+            probe.decompile_warnings = list(decompiled.warnings)
+        else:
+            probe.decompile_warnings = list(decompiled.warnings) or ["unsupported SL2 tree"]
     for element in info.walk():
         if element.kind not in ("imagebutton", "button", "textbutton"):
             continue
@@ -621,7 +641,14 @@ def probe_style(
     result.evidence = evidence
 
     if quick_menu is not None and quick_menu.found and not quick_menu.has_source:
-        result.notes.append(
-            "quick_menu ships only as .rpyc; the entry button will be drawn as an overlay companion"
-        )
+        if quick_menu.decompiled:
+            result.notes.append(
+                "quick_menu was reconstructed from compiled SL2; a source-style "
+                "wrapper can be generated without touching the original archive"
+            )
+        else:
+            result.notes.append(
+                "quick_menu ships only as .rpyc and its SL2 tree is not safely "
+                "reconstructible; the entry button will be drawn as an overlay companion"
+            )
     return result

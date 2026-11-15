@@ -187,10 +187,23 @@ def static_check(files: Iterable[GeneratedFile]) -> list[str]:
             if "PGF_NODES" not in generated.content:
                 problems.append("pgf_flowchart_screen.rpy has no PGF_NODES data")
         if generated.name == "pgf_menu_hook.rpy":
-            if 'ShowMenu("pgf_flowchart")' not in generated.content:
+            if (
+                'ShowMenu("pgf_flowchart")' not in generated.content
+                and 'Show("pgf_flowchart")' not in generated.content
+            ):
                 problems.append("pgf_menu_hook.rpy never opens pgf_flowchart")
-            if "quick_menu" not in screens and "pgf_quick_button" not in screens:
-                problems.append("pgf_menu_hook.rpy has neither a quick menu patch nor an overlay button")
+            if "screen pgf_hotkey()" not in generated.content:
+                problems.append("pgf_menu_hook.rpy has no pgf_hotkey screen")
+            if not any(
+                name in screens
+                for name in (
+                    "quick_menu",
+                    "pgf_quick_button",
+                    "pgf_title_button",
+                    "pgf_game_menu_button",
+                )
+            ):
+                problems.append("pgf_menu_hook.rpy has no quick menu or overlay button screen")
     return problems
 
 

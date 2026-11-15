@@ -129,8 +129,8 @@ class EmitTests(unittest.TestCase):
         self.assertNotIn("pgf_replay", self.file.content)
 
     def test_no_unsafe_characters_in_screen_names(self) -> None:
-        self.assertIn('screen pgf_flowchart():', self.file.content)
-        self.assertIn('key "game_menu" action Return()', self.file.content)
+        self.assertIn('screen pgf_flowchart(pgf_from_menu=False):', self.file.content)
+        self.assertIn('Hide("pgf_flowchart") if pgf_from_menu else Return()', self.file.content)
 
 
 class TitleFitTests(unittest.TestCase):

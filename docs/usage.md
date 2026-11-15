@@ -110,12 +110,13 @@ pgf install <game> --screenshots screenshots/
 | `--screenshots PATH` | 截图或截图目录，可重复；需要配置视觉后端 |
 | `--vision-endpoint URL` | 覆盖 `PGF_VISION_ENDPOINT` |
 | `--vision-model NAME` | 覆盖 `PGF_VISION_MODEL` |
-| `--entry-mode quick_menu_patch\|ai_rewrite\|overlay_button` | 强制入口模式；`ai_rewrite` 当前不可用 |
+| `--entry-mode quick_menu_patch\|overlay_button\|title_menu\|game_menu\|gamepad` | 强制入口模式；`ai_rewrite` 当前不可用 |
+| `--gamepad` | 为热键增加 `pad_y` / `pad_start` 手柄按键 |
 | `--json` | 机器可读输出 |
 
 ## 游戏内行为
 
-- 打开：快捷菜单旁的“流程图”按钮；或 **F10**；`ShowMenu("pgf_flowchart")`。
+- 打开：快捷菜单旁的“流程图”按钮；标题画面/游戏菜单的同伴按钮（取决于安装模式）；或 **F10**（可加 `--gamepad` 绑手柄）；`ShowMenu("pgf_flowchart")`。
 - 关闭：右上角“关闭”按钮、`Esc`。
 - 浏览：拖拽 viewport、鼠标滚轮、底部 ↑↓←→ 按钮；`－/＋/适应` 调整缩放。
 - 可点击节点 = 当前存档的 `_history_list` 中仍存在对应检查点（场景、选择、结局都可能）。节点未标注“无历史”时表示可以回滚。
@@ -146,9 +147,9 @@ pgf uninstall "<game>"
 
 ## 常见问题
 
-### `quick_menu source is available` 和 `ships only as compiled code`
+### `quick_menu source is available` / `reconstructed from compiled SL2` / `ships only as compiled code`
 
-前者会改写（复制+包装）quick_menu；后者会在原快捷菜单旁放一个悬浮按钮。两者都安装 F10 热键。这是由游戏是否随包发布 `.rpy` 决定的，不是错误。
+前两者都会改写（复制+包装）quick_menu；区别是源码来自 `.rpy` 还是从 `.rpyc` 的 SL2 树重建。只有重建也失败时才在原快捷菜单旁放一个悬浮按钮。三种模式都安装 F10 热键。
 
 ### 安装后游戏打不开 / 报错
 

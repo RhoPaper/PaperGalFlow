@@ -6,6 +6,33 @@ gets its own version so the history stays traceable.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-15
+
+### Added
+
+- **Screen language reconstruction.**  For games that ship only `.rpyc`,
+  `pgf-adapter-renpy` can now render the compiled `quick_menu` SL2 tree back
+  to readable screen language (displayables, `use`, `if`/`elif`/`else`,
+  `for`, properties and indentation).  Supported screens are copied into a
+  private base screen and wrapped exactly like a source patch; unsupported
+  ATL/unknown trees fail closed and keep the overlay companion button.
+- **More entry points.**  `--entry-mode title_menu` adds a companion button
+  to the title screen, `--entry-mode game_menu` adds one while the game menu
+  is open, and `--gamepad` / `--entry-mode gamepad` bind `pad_y` and
+  `pad_start` alongside F10.  The chart closes with `Hide(...)` when opened
+  from a menu context and with `Return()` in normal game context.
+- Screen-level properties (including `style_prefix`, `zorder`, variants) are
+  copied into both the base and wrapper screens.
+- `QuickMenuProbe` reports `decompiled`, `source_format` and decompile
+  warnings; the adapter exposes the same fields in `pgf inspect --json`.
+
+### Fixed
+
+- A decompiled `quick_menu` patch now includes the `pgf_hotkey` screen (the
+  source-patch path had omitted it; overlay mode was unaffected).
+- Compiled local labels and jump/call targets (`.name`) are resolved against
+  their enclosing global label.
+
 ## [0.4.3] - 2026-11-01
 
 ### Added

@@ -272,6 +272,8 @@ class RenPyAdapter:
                 "found": probe.quick_menu.found,
                 "buttons": probe.quick_menu.button_count,
                 "has_source": probe.quick_menu.has_source,
+                "decompiled": probe.quick_menu.decompiled,
+                "source_format": probe.quick_menu.source_format,
                 "bbox": list(probe.quick_menu.bbox) if probe.quick_menu.bbox else None,
             }
         evidence = {
@@ -340,14 +342,37 @@ class RenPyAdapter:
                 available=False,
                 reason="AI 辅助改写需要外部语言模型后端，当前未配置",
             )
-        if mode == "quick_menu_patch":
+        entry_options = options or {}
+        gamepad = bool(entry_options.get("gamepad", False))
+        if mode in ("title_menu", "game_menu"):
+            plan = build_entry_plan(
+                tokens,
+                probe.quick_menu,
+                EntryOptions(
+                    game_name=info.game_name,
+                    screen_size=screen_size,
+                    force_mode=mode,
+                    gamepad=gamepad,
+                ),
+            )
+        elif mode == "gamepad":
+            plan = build_entry_plan(
+                tokens,
+                probe.quick_menu,
+                EntryOptions(
+                    game_name=info.game_name,
+                    screen_size=screen_size,
+                    force_mode="gamepad",
+                    gamepad=True,
+                ),
+            )
+        elif mode == "quick_menu_patch":
             quick = probe.quick_menu
-            if quick is None or not quick.found or not quick.has_source or not quick.source.strip():
-                return EntryResult(
-                    mode=mode,
-                    available=False,
-                    reason="quick_menu 只有编译后的 .rpyc，无法安全地按源码追加按钮",
-                )
+            if quick is None or not quick.found or not quick.source.strip():
+                reason = "quick_menu 只有编译后的 .rpyc，且其 SL2 树无法安全重建；继续使用悬浮按钮"
+                if quick is not None and quick.decompile_warnings:
+                    reason += "（" + "；".join(quick.decompile_warnings[:2]) + "）"
+                return EntryResult(mode=mode, available=False, reason=reason)
             plan = build_entry_plan(
                 tokens,
                 quick,
@@ -356,6 +381,7 @@ class RenPyAdapter:
                     screen_size=screen_size,
                     prefer_quick_menu_patch=True,
                     force_mode="quick_menu_patch",
+                    gamepad=gamepad,
                 ),
             )
             if not plan.patched_quick_menu:
@@ -368,13 +394,13 @@ class RenPyAdapter:
                     game_name=info.game_name,
                     screen_size=screen_size,
                     force_mode="overlay_button",
+                    gamepad=gamepad,
                 ),
             )
         else:
             return EntryResult(mode=mode, available=False, reason=f"未知入口模式 {mode!r}")
 
         self._entry_plan = plan
-        entry_options = options or {}
         entry_label = str(entry_options.get("entry_label", ""))
         return EntryResult(
             mode=plan.mode,

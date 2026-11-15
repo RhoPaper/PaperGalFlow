@@ -128,6 +128,7 @@ def _make_options(args: argparse.Namespace) -> PipelineOptions:
         screenshots=_collect_screenshots(getattr(args, "screenshots", None)),
         vision_endpoint=getattr(args, "vision_endpoint", "") or "",
         vision_model=getattr(args, "vision_model", "") or "",
+        gamepad=bool(getattr(args, "gamepad", False)),
     )
 
 
@@ -404,8 +405,11 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--preset", default="paper_dark", choices=("paper_dark", "paper_light"),
                         help="预置风格（证据不足时使用）")
     parser.add_argument("--entry-mode", default="",
-                        choices=("", "quick_menu_patch", "ai_rewrite", "overlay_button"),
+                        choices=("", "quick_menu_patch", "ai_rewrite", "overlay_button",
+                                 "title_menu", "game_menu", "gamepad"),
                         help="强制入口模式")
+    parser.add_argument("--gamepad", action="store_true",
+                        help="为 F10 热键增加手柄按键（pad_y / pad_start）")
     parser.add_argument("--include-side-labels", action="store_true",
                         help="包含仅通过 call 到达的支线 label")
     parser.add_argument("--show-condition-labels", action="store_true",

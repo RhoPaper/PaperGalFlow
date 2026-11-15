@@ -38,6 +38,7 @@ __all__ = [
     "extract_payload",
     "decode_rpyc",
     "normalize_statement_block",
+    "resolve_local_labels",
 ]
 
 RPYC2_HEADER = b"RENPY RPC2"
@@ -186,8 +187,38 @@ class _SafeUnpickler(pickle.Unpickler):
 # ---------------------------------------------------------------------------
 
 
+def _rpcy2_slots(blob: bytes, fmt: str) -> dict[int, tuple[int, int]] | None:
+    """Read the RPYC2 slot table using *fmt* (little/big endian)."""
+
+    header = blob[:_HEADER_PEEK]
+    if len(header) < len(RPYC2_HEADER) + _SLOT_SIZE:
+        return None
+    slots: dict[int, tuple[int, int]] = {}
+    position = len(RPYC2_HEADER)
+    while position + _SLOT_SIZE <= len(header):
+        try:
+            slot, start, length = struct.unpack(fmt, header[position : position + _SLOT_SIZE])
+        except struct.error:  # pragma: no cover - header length checked
+            return None
+        position += _SLOT_SIZE
+        if slot == 0:
+            return slots
+        if slot < 1 or slot > 64 or slot in slots:
+            break
+        if start <= 0 or length <= 0 or start + length > len(blob):
+            break
+        slots[slot] = (start, length)
+    return slots or None
+
+
 def extract_payload(blob: bytes) -> bytes:
-    """Return the pickled ``(metadata, statements)`` payload of a ``.rpyc``."""
+    """Return the pickled ``(metadata, statements)`` payload of a ``.rpyc``.
+
+    Ren'Py writes the slot table in native little-endian order on the platforms
+    used by the games we support.  Some reverse-engineered or big-endian
+    builds use big-endian words, so both orders are attempted and validated
+    before any slot is decompressed.
+    """
 
     if not blob.startswith(RPYC2_HEADER):
         # Legacy format: the whole file is a zlib compressed pickle.
@@ -196,30 +227,24 @@ def extract_payload(blob: bytes) -> bytes:
         except zlib.error as exc:
             raise RpycError(f"not a Ren'Py compiled script: {exc}") from exc
 
-    header = blob[:_HEADER_PEEK]
-    if len(header) < len(RPYC2_HEADER) + _SLOT_SIZE:
-        raise RpycError("truncated RPYC2 header")
-
-    slots: dict[int, tuple[int, int]] = {}
-    position = len(RPYC2_HEADER)
-    while position + _SLOT_SIZE <= len(header):
-        slot, start, length = struct.unpack("<III", header[position : position + _SLOT_SIZE])
-        position += _SLOT_SIZE
-        if slot == 0:
-            break
-        slots[slot] = (start, length)
+    candidates = [
+        slots
+        for fmt in ("<III", ">III")
+        if (slots := _rpcy2_slots(blob, fmt)) is not None
+    ]
+    if not candidates:
+        raise RpycError("no valid RPYC2 slot table (truncated or corrupt header)")
 
     # Slot 2 holds the statically transformed statements, slot 1 the raw ones.
-    for wanted in (2, 1):
-        if wanted not in slots:
-            continue
-        start, length = slots[wanted]
-        if length <= 0 or start + length > len(blob):
-            continue
-        try:
-            return zlib.decompress(blob[start : start + length])
-        except zlib.error:
-            continue
+    for slots in candidates:
+        for wanted in (2, 1):
+            if wanted not in slots:
+                continue
+            start, length = slots[wanted]
+            try:
+                return zlib.decompress(blob[start : start + length])
+            except zlib.error:
+                continue
     raise RpycError("no usable statement slot in .rpyc file")
 
 
@@ -319,6 +344,31 @@ def _normalize_node(node: Any) -> Statement | None:
             who=_expr(getattr(node, "who", None)),
         )
 
+    if cls == "While":
+        return Statement(
+            kind=Stmt.WHILE,
+            line=line,
+            filename=filename,
+            condition=_expr(getattr(node, "condition", None)),
+            block=_normalize_block(getattr(node, "block", None)),
+        )
+
+    if cls == "For":
+        return Statement(
+            kind=Stmt.FOR,
+            line=line,
+            filename=filename,
+            name=_expr(getattr(node, "variable", None)),
+            source=_expr(getattr(node, "expression", None)),
+            block=_normalize_block(getattr(node, "block", None)),
+        )
+
+    if cls == "Break":
+        return Statement(kind=Stmt.BREAK, line=line, filename=filename)
+
+    if cls == "Continue":
+        return Statement(kind=Stmt.CONTINUE, line=line, filename=filename)
+
     if cls == "Menu":
         raw_items = getattr(node, "items", None) or []
         items: list[MenuItem] = []
@@ -361,14 +411,14 @@ def _normalize_node(node: Any) -> Statement | None:
         return Statement(kind=Stmt.IF, line=line, filename=filename, entries=entries)
 
     if cls in ("Jump", "Call"):
-        target = getattr(node, "label", None) if cls == "Call" else getattr(node, "target", None)
-        expression = _expr(getattr(node, "expression", None))
+        raw_target = getattr(node, "label", None) if cls == "Call" else getattr(node, "target", None)
+        is_expression = bool(getattr(node, "expression", False))
         return Statement(
             kind=Stmt.JUMP if cls == "Jump" else Stmt.CALL,
             line=line,
             filename=filename,
-            target=_expr(target),
-            source=expression,
+            target="" if is_expression else _expr(raw_target),
+            source=_expr(raw_target) if is_expression else "",
             meta={"arguments": _expr(getattr(node, "arguments", None))},
         )
 
@@ -491,9 +541,16 @@ def _screen_element(node: Any) -> ScreenElement | None:
             element = _screen_element(child)
             if element is not None:
                 children.append(element)
-        positional = getattr(node, "positional", None) or []
-        text = _expr(positional[0]) if positional else ""
-        return ScreenElement(kind=kind, line=line, properties=properties, children=children, text=text)
+        positional = [_expr(value) for value in (getattr(node, "positional", None) or [])]
+        text = positional[0] if positional else ""
+        return ScreenElement(
+            kind=kind,
+            line=line,
+            properties=properties,
+            children=children,
+            text=text,
+            positionals=positional,
+        )
 
     if cls == "SLUse":
         target = _literal(getattr(node, "target", None))
@@ -505,6 +562,7 @@ def _screen_element(node: Any) -> ScreenElement | None:
         return ScreenElement(kind="use", line=line, properties=properties, children=children, target=target)
 
     if cls in ("SLIf", "SLShowIf"):
+        branches: list[tuple[str, list[ScreenElement]]] = []
         for entry in getattr(node, "entries", None) or []:
             condition = ""
             block = None
@@ -513,14 +571,23 @@ def _screen_element(node: Any) -> ScreenElement | None:
             else:
                 condition = _expr(getattr(entry, "condition", None))
                 block = getattr(entry, "block", None)
+            branch_children: list[ScreenElement] = []
             block_children = getattr(block, "children", None) or []
             for child in block_children:
                 element = _screen_element(child)
                 if element is not None:
                     if condition and not element.condition:
                         element.condition = condition
+                    branch_children.append(element)
                     children.append(element)
-        return ScreenElement(kind="if", line=line, properties=properties, children=children)
+            branches.append((condition, branch_children))
+        return ScreenElement(
+            kind="if",
+            line=line,
+            properties=properties,
+            children=children,
+            branches=branches,
+        )
 
     if cls in ("SLBlock", "SLATL"):
         for child in getattr(node, "children", None) or []:
@@ -529,7 +596,25 @@ def _screen_element(node: Any) -> ScreenElement | None:
                 children.append(element)
         return ScreenElement(kind="block", line=line, properties=properties, children=children)
 
-    # SLFor, SLTransform, SLText and friends: keep children when present.
+    if cls == "SLFor":
+        variable = _expr(getattr(node, "variable", None))
+        index = _expr(getattr(node, "index", None))
+        expression = _expr(getattr(node, "expression", None))
+        for child in getattr(node, "children", None) or []:
+            element = _screen_element(child)
+            if element is not None:
+                children.append(element)
+        return ScreenElement(
+            kind="for",
+            line=line,
+            properties=properties,
+            children=children,
+            for_variable=variable,
+            for_expression=expression,
+            for_index=index,
+        )
+
+    # SLTransform, SLText and friends: keep children when present.
     for attribute in ("children", "entries"):
         for child in getattr(node, attribute, None) or []:
             if isinstance(child, (tuple, list)):
@@ -578,12 +663,34 @@ def _screen_info(screen: Any) -> ScreenInfo:
 # ---------------------------------------------------------------------------
 
 
+def resolve_local_labels(statements: list[Statement]) -> None:
+    """Resolve compiled ``.label`` names/targets against their enclosing label."""
+
+    def walk(block: list[Statement], global_label: str) -> None:
+        for statement in block:
+            if statement.kind == Stmt.LABEL and statement.name:
+                if statement.name.startswith("."):
+                    statement.name = global_label + statement.name
+                    child_global = global_label
+                else:
+                    child_global = statement.name
+                walk(statement.block, child_global)
+                continue
+            if statement.kind in (Stmt.JUMP, Stmt.CALL) and statement.target.startswith("."):
+                statement.target = global_label + statement.target
+            for nested in statement.iter_blocks():
+                walk(nested, global_label)
+
+    walk(statements, "")
+
+
 def decode_rpyc(blob: bytes, filename: str = "") -> ScriptFile:
     """Decode a ``.rpyc`` file into a normalized :class:`ScriptFile`."""
 
     payload = extract_payload(blob)
     metadata, raw_statements = _load_pickle(payload)
     statements = normalize_statement_block(raw_statements)
+    resolve_local_labels(statements)
     if not filename:
         for statement in statements:
             if statement.filename:
