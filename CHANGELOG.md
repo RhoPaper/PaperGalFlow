@@ -6,6 +6,26 @@ gets its own version so the history stays traceable.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-15
+
+### Added
+
+- **RPAE-2.0 encrypted archives.**  The reader now recognises the
+  `RPAE-2.0` header, decrypts the AES-256-CTR index and payloads through a
+  dependency-free AES implementation, and accepts the AES key only from
+  `PGF_RPA_KEY` (64 hex characters).  Without a key the archive fails with an
+  explicit `RpaEncryptedError` instead of a generic pickle/zlib error.
+- **Archive hardening.**  Compressed/decompressed index limits, entry and
+  entry-part limits, name/path validation, prefix/read size caps, lazy key
+  parsing, and per-entry bounds checks.
+- **Cross-platform byte order.**  The RPYC2 slot table is accepted in both
+  little-endian and big-endian word order (validated before decompression).
+
+### Changed
+
+- `RpaArchive` exposes `encrypted` and `warnings`; unsafe or oversized
+  entries are skipped with diagnostics instead of poisoning the whole archive.
+
 ## [0.5.0] - 2026-11-15
 
 ### Added

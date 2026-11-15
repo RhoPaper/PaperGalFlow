@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import os
 import pickle
+import struct
 import tempfile
 import unittest
+from unittest import mock
 import zlib
 from pathlib import Path
 
-from pgf_adapter_renpy.rpa import RpaArchive, RpaError, find_archives
+from pgf_adapter_renpy import rpa as rpa_module
+from pgf_adapter_renpy.aes import aes256_ctr
+from pgf_adapter_renpy.rpa import RpaArchive, RpaEncryptedError, RpaError, find_archives
 
 from .game_paths import game1_dir, has_game1
 
@@ -48,6 +52,39 @@ def write_rpa(
     path.write_bytes(header + bytes(body) + compressed)
 
 
+def write_rpae(
+    path: Path,
+    files: dict[str, bytes],
+    *,
+    key: bytes,
+    xor_key: int = 0x12345678,
+) -> None:
+    """Write a synthetic RPAE-2.0 archive for tests."""
+
+    header = bytearray(52)
+    header[0:8] = b"RPAE-2.0"
+    header[8] = 0x20
+    header[25] = 0x20
+    header[34] = 0x0A
+    index_nonce = bytes(range(12))
+    header[40:52] = index_nonce
+    offset = len(header)
+    body = bytearray()
+    index: dict[str, list[tuple[int, int, bytes]]] = {}
+    for position, (name, data) in enumerate(files.items()):
+        nonce = bytes([(position + 1) % 256] * 12)
+        encrypted = aes256_ctr(key, nonce, data)
+        start = offset + len(body)
+        body.extend(encrypted)
+        index[name] = [(start ^ xor_key, len(data) ^ xor_key, nonce)]
+    index_offset = offset + len(body)
+    header[9:25] = f"{index_offset:016x}".encode("ascii")
+    header[26:34] = f"{xor_key:08x}".encode("ascii")
+    compressed = zlib.compress(pickle.dumps(index, protocol=4))
+    encrypted_index = aes256_ctr(key, index_nonce, compressed)
+    path.write_bytes(bytes(header) + bytes(body) + encrypted_index)
+
+
 class SyntheticArchiveTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -81,6 +118,62 @@ class SyntheticArchiveTests(unittest.TestCase):
         write_rpa(path, files, prefixes={"f.bin": b"PRE:"})
         with RpaArchive.open(path) as archive:
             self.assertEqual(archive.read("f.bin"), b"PRE:PAYLOAD")
+
+    def test_rpae_roundtrip_with_key(self) -> None:
+        key = bytes(range(32))
+        files = {"scripts/script.rpyc": b"encrypted script", "gui/bg.png": b"PNG"}
+        path = self.root / "encrypted.rpa"
+        write_rpae(path, files, key=key)
+        with RpaArchive.open(path, key=key.hex()) as archive:
+            self.assertEqual(archive.version, 4)
+            self.assertTrue(archive.encrypted)
+            for name, data in files.items():
+                self.assertEqual(archive.read(name), data)
+
+    def test_rpae_requires_key(self) -> None:
+        path = self.root / "encrypted.rpa"
+        write_rpae(path, {"a": b"x"}, key=bytes(range(32)))
+        with mock.patch.dict(os.environ, {"PGF_RPA_KEY": ""}):
+            with self.assertRaises(RpaEncryptedError):
+                RpaArchive.open(path)
+        with self.assertRaises(RpaError):
+            RpaArchive.open(path, key="not-a-key")
+
+    def test_index_limits(self) -> None:
+        compressed = zlib.compress(b"\x00" * 4096)
+        with mock.patch.object(rpa_module, "MAX_INDEX_DECOMPRESSED", 1024):
+            with self.assertRaises(RpaError):
+                rpa_module._decompress_limited(compressed, 1024)
+        path = self.root / "many.rpa"
+        write_rpa(path, {f"f{i}.rpy": b"x" for i in range(5)})
+        with mock.patch.object(rpa_module, "MAX_ENTRIES", 2):
+            with self.assertRaises(RpaError):
+                RpaArchive.open(path)
+
+    def test_rpae_wrong_key_is_rejected(self) -> None:
+        path = self.root / "encrypted.rpa"
+        write_rpae(path, {"a": b"secret"}, key=bytes(range(32)))
+        with self.assertRaises(RpaError):
+            RpaArchive.open(path, key=(b"\x00" * 32).hex())
+
+    def test_unsafe_names_and_oversized_entries_are_skipped(self) -> None:
+        files = {"../evil.rpy": b"x", "/abs.rpy": b"x", "ok.rpy": b"ok"}
+        path = self.root / "names.rpa"
+        write_rpa(path, files)
+        with RpaArchive.open(path) as archive:
+            self.assertEqual(archive.names(), ("ok.rpy",))
+            self.assertTrue(archive.warnings)
+
+    def test_big_endian_slot_table(self) -> None:
+        from pgf_adapter_renpy.rpyc import RPYC2_HEADER, extract_payload
+
+        body = zlib.compress(pickle.dumps(({}, []), protocol=4))
+        header = bytearray(RPYC2_HEADER)
+        header.extend(b"\x00" * 24)
+        start = len(header)
+        header.extend(body)
+        struct.pack_into(">III", header, len(RPYC2_HEADER), 2, start, len(body))
+        self.assertEqual(extract_payload(bytes(header)), zlib.decompress(body))
 
     def test_missing_file(self) -> None:
         with self.assertRaises(RpaError):

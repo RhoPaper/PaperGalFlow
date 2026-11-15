@@ -76,6 +76,17 @@ pgf preview <game> --theme out/sakura.json --out out/sakura.html
 
 主题字段分组：`colors`、`typography`、`geometry`、`layout`、`edges`、`chrome`、`palettes`；也可以直接写 `"accent": "#..."` 这类平坦键。`"preset": "paper_light"` 会先切换到内置主题再叠加覆盖。未知键或非法颜色会直接报错，不会生成坏代码。
 
+### 加密归档（RPAE-2.0）
+
+如果游戏使用 `RPAE-2.0` 加密 `.rpa`，PaperGalFlow 不会猜测或内置密钥；请在有合法密钥时设置：
+
+```bash
+export PGF_RPA_KEY=<64 位十六进制 AES-256 密钥>
+pgf inspect <game>
+```
+
+未设置密钥时会给出明确的 `RPAE` 错误并跳过该归档，而不是把解密失败误报成损坏的 pickle。归档索引、条目数、名称、前缀和单次读取都有上限；可疑条目会被跳过并记录 warning。
+
 ### 可选：截图视觉分析
 
 样式链支持把游戏截图交给 OpenAI 兼容的视觉模型，作为本地 GUI/PNG 采样的补充；模型只提供颜色和圆角/边框建议，不参与剧情跳转，也不会写游戏状态。
