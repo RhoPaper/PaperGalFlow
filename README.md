@@ -27,7 +27,7 @@ PaperGalFlow 解析游戏脚本，还原 label / 选项 / 条件分支 / 结局�
 | 模块 | Python 包 | 职责 |
 | --- | --- | --- |
 | `pgf-core` | `pgf_core` | 引擎无关的剧情图、节点状态机、布局、持久化接口、降级链调度、适配器协议、CLI、离线预览 |
-| `pgf-adapter-renpy` | `pgf_adapter_renpy` | Ren'Py 适配器：RPA/RPYC/RPY 解析、剧情图分析、UI 探测、screen 生成、入口注入、安装/卸载 |
+| `pgf-adapter-renpy` | `pgf_adapter_renpy` | Ren'Py 适配器：RPA/RPYC/RPY 解析（含 RPAE/大小端）、SL2 重建、剧情图分析、UI 探测、screen 生成、入口注入、安装/卸载 |
 | `pgf-style` | `pgf_style` | 风格 token 模型、颜色/区域采样、证据融合、JSON 主题、截图视觉后端、预置主题、Ren'Py 样式翻译 |
 
 依赖方向：`pgf-adapter-renpy → pgf-core + pgf-style`，`pgf-style → 标准库`，`pgf-core → 标准库 + pgf-style`。CLI 只导入 `pgf_core`，适配器通过 `pgf.adapters` entry point 或 `PGF_ADAPTERS` 环境变量注册。
@@ -114,7 +114,8 @@ PaperGalFlow 的 Core 统一编排三条链路，适配器只报告每一步的�
 | 《永恒与星辰与日常》：仅 `.rpyc`、2560×1440、自定义快捷菜单图标、`images.rpa` | ✅ 45 节点 / 54 连线 / 4 结局；入口走悬浮按钮 |
 | 《小小的身影，重叠的内心》：仅 `.rpyc`、1920×1080、粉白主题、两张结局 | ✅ 25 节点 / 30 连线 / 2 结局；主题与按钮位置来自游戏 UI 采样 |
 | v0.4.3 九宫格 UI / 主题 / 回滚 | ✅ 实际启动打开流程图；节点 → 游戏确认框 → `RollbackToIdentifier` 回到起点；两游戏 lint 通过 |
-| 单元/集成测试 | ✅ 247 项（两个游戏的测试在未安装时自动 skip） |
+| v0.5.x `.rpyc` 重建 / 入口 | ✅ 两游戏从编译 SL2 重建 quick_menu 并以 `quick_menu_patch` 安装、lint 通过；实际启动保留原快捷菜单布局并打开流程图；标题画面按钮已实测打开/关闭 |
+| 单元/集成测试 | ✅ 274 项（两个游戏的测试在未安装时自动 skip） |
 
 Windows 原生尚未验证；代码只使用 `pathlib`、`zlib`、`pickle` 白名单反序列化等标准库能力，不依赖 POSIX 路径、符号链接或外部进程。建议在 Windows 上：
 

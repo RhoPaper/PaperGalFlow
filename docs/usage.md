@@ -121,7 +121,7 @@ pgf install <game> --screenshots screenshots/
 | `--screenshots PATH` | 截图或截图目录，可重复；需要配置视觉后端 |
 | `--vision-endpoint URL` | 覆盖 `PGF_VISION_ENDPOINT` |
 | `--vision-model NAME` | 覆盖 `PGF_VISION_MODEL` |
-| `--entry-mode quick_menu_patch\|overlay_button\|title_menu\|game_menu\|gamepad` | 强制入口模式；`ai_rewrite` 当前不可用 |
+| `--entry-mode quick_menu_patch\|overlay_button\|title_menu\|game_menu\|gamepad\|ai_rewrite` | 强制入口模式；`ai_rewrite` 当前不可用 |
 | `--gamepad` | 为热键增加 `pad_y` / `pad_start` 手柄按键 |
 | `--json` | 机器可读输出 |
 

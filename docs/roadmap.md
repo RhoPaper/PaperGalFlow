@@ -17,12 +17,12 @@ v0.4.3 的边界是“只读游戏状态、只复用游戏自身的历史回滚�
 - [x] **UI 资产选择增强**（v0.4.1）：中心区域取色、渐变/半透明识别、`images.rpa` 面板扫描与 nine-patch 边框探测。
 - [x] **主题编辑器**（v0.4.2）：`pgf theme` 导出 JSON，`pgf preview/install --theme theme.json` 立即预览与应用。
 
-## 0.5.x 解析与入口
+## 0.5.x 解析与入口（v0.5.0–v0.5.2，已完成）
 
-- **screen language 反编译**：对只有 `.rpyc` 的游戏，重建 `quick_menu` 的可读源码，从而支持源码式追加；需要覆盖 SL2 节点类型与缩进还原。
-- **RPA 完整性**：支持 RPAE 加密归档、跨平台字节序变体、恶意归档资源上限。
-- **更完整的 Ren'Py 语法**：`while`/`for` 循环内的控制流、`translate` 变体、局部 label 的精确 fallthrough、`call expression` 动态目标。
-- **更多入口模式**：标题画面入口、游戏菜单入口、手柄按键提示。
+- [x] **screen language 反编译**（v0.5.0）：从 `.rpyc` 的 SL2 树重建 `quick_menu` 可读源码，覆盖 displayable、`use`、`if/elif/else`、`for`、属性和缩进；不支持安全重建时回退悬浮按钮。
+- [x] **RPA 完整性**（v0.5.1）：RPAE-2.0 AES-256-CTR（需 `PGF_RPA_KEY`）、RPYC2 大小端、索引/条目/名称/前缀/读取资源上限。
+- [x] **更完整的 Ren'Py 语法**（v0.5.2）：`while`/`for` 循环与 `break`/`continue`、`translate` 变体跳过、编译局部 label、动态 `jump/call expression` 的字面量/`define` 解析。
+- [x] **更多入口模式**（v0.5.0）：标题画面、游戏菜单、`pad_y`/`pad_start` 手柄按键。
 
 ## 0.6.x 平台与生态
 
